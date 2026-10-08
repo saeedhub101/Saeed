@@ -1,5 +1,5 @@
 # Windows-only packaging and release workflow
-# Build from the current main revision; no lockfile-dependent npm cache is used.
+# Electron Builder creates the installer locally; the release action publishes it.
 name: Windows Build and Release
 
 on:
@@ -16,16 +16,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Install dependencies
         shell: pwsh
         run: npm install
+
       - name: Build Windows installer
         shell: pwsh
-        run: npm run dist
+        run: npm run dist -- --publish never
+
       - name: Verify installer
         shell: pwsh
         run: |
@@ -35,6 +39,7 @@ jobs:
             exit 1
           }
           $files | ForEach-Object { Write-Host "FOUND: $($_.FullName) ($($_.Length) bytes)" }
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -43,5 +48,6 @@ jobs:
           generate_release_notes: true
           files: |
             dist/*.exe
+            dist/*.blockmap
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
