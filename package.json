@@ -20,16 +20,32 @@
   "build": {
     "appId": "com.avataragent.app",
     "productName": "Avatar Agent",
-    "directories": { "output": "dist" },
+    "directories": {
+      "output": "dist"
+    },
     "files": [
-      "src/**/*",
+      "src/main/**/*",
+      "src/preload/**/*",
+      "src/renderer/**/*",
+      "src/shared/**/*",
+      "src/assets/**/*",
       "package.json",
+      "node_modules/three/build/three.module.js",
+      "node_modules/three/examples/jsm/**/*",
       "!node_modules/three/src/**",
-      "!node_modules/three/examples/{fonts,models,textures,screenshots,jsm/libs}/**",
+      "!node_modules/three/examples/jsm/libs/**",
+      "!node_modules/three/examples/{fonts,models,textures,screenshots}/**",
       "!node_modules/three/build/{three.cjs,three.min.js,three.module.min.js}"
     ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "src/assets/icon.png"
     },
     "nsis": {
@@ -39,6 +55,7 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Avatar Agent"
-    }
+    },
+    "asar": true
   }
 }
