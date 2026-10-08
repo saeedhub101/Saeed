@@ -27,6 +27,7 @@
       "src/**",
       "package.json",
       "node_modules/three/**",
+    "node_modules/three/examples/jsm/**",
       "!node_modules/three/src/**",
       "!node_modules/three/examples/jsm/libs/**",
       "!node_modules/three/examples/{fonts,models,textures,screenshots}/**",
