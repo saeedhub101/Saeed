@@ -94,6 +94,9 @@ function openStudio(tab = 'bones') {
   });
   studioWin.removeMenu();
   studioWin.loadFile(page('studio.html'), { query: { tab } });
+  studioWin.webContents.on('before-input-event', (_e, i) => {
+    if (i.type === 'keyDown' && (i.key === 'F12' || (i.control && i.shift && i.key.toLowerCase() === 'i'))) studioWin.webContents.toggleDevTools();
+  });
   studioWin.on('closed', () => { studioWin = null; });
 }
 
@@ -136,6 +139,9 @@ function buildTray() {
     { type: 'separator' },
     { label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
       click: (i) => app.setLoginItemSettings({ openAtLogin: i.checked }) },
+    { label: 'Developer tools', click: () => {
+      for (const w of [avatarWin, studioWin]) if (w && !w.isDestroyed()) w.webContents.openDevTools({ mode: 'detach' });
+    } },
     { type: 'separator' },
     { label: 'Quit', click: () => app.quit() },
   ]));

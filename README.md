@@ -16,6 +16,8 @@ Desktop 3D avatar for Windows (Electron + three.js). Phase 1:
 
 ## Run
 
+`npm install` also copies the three.js files into `src/vendor/three` (script `scripts/vendor.js`). This is required: electron-builder removes `node_modules/*/examples` when packing, so the app must not load them from there.
+
 ```
 npm install
 npm start
@@ -49,7 +51,7 @@ Settings are stored in `%APPDATA%/Avatar Agent/config.json`.
 
 ## Known limits
 
-- Not yet tested on a real machine; expect small bugs. Open DevTools (Ctrl+Shift+I in Studio) to see errors.
+- Not yet tested on a real machine; expect small bugs. Errors are shown in a red box at the top of each window; tray → Developer tools opens the console.
 - Only `.glb` (self-contained) files. Auto-skinning is basic; use Blender for production rigs.
 - Face expressions work only if the GLB has morph targets named like smile / sad / surprised.
 - Voice, LLM, chat window: phase 2.
