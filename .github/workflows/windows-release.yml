@@ -70,8 +70,6 @@ jobs:
             }
             Write-Host "ASAR OK: $item"
           }
-            Write-Host "ASAR OK: $item"
-          }
 
       - name: Verify installer
         shell: pwsh
