@@ -8,7 +8,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis"
+    "dist": "node scripts/vendor.js && electron-builder --win nsis"
   },
   "dependencies": {
     "three": "0.170.0"
@@ -27,10 +27,8 @@
       "src/**",
       "package.json",
       "node_modules/three/**",
-    "node_modules/three/examples/jsm/**",
       "!node_modules/three/src/**",
-      "!node_modules/three/examples/jsm/libs/**",
-      "!node_modules/three/examples/{fonts,models,textures,screenshots}/**",
+      "!node_modules/three/examples/**",
       "!node_modules/three/build/{three.cjs,three.min.js,three.module.min.js}"
     ],
     "win": {
