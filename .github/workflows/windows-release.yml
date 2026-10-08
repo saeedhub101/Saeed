@@ -1,0 +1,52 @@
+name: Windows Build and Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        shell: pwsh
+        run: npm install
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: npm run dist
+
+      - name: Verify installer
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path dist -File -Filter *.exe -ErrorAction SilentlyContinue
+          if (-not $files) {
+            Write-Error "No Windows .exe installer was produced."
+            exit 1
+          }
+          $files | ForEach-Object { Write-Host "FOUND: $($_.FullName) ($($_.Length) bytes)" }
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.${{ github.run_number }}
+          name: Avatar Agent v0.1.${{ github.run_number }}
+          generate_release_notes: true
+          files: |
+            dist/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
