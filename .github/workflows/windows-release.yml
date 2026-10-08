@@ -33,12 +33,16 @@ jobs:
       - name: Verify packaged runtime files
         shell: pwsh
         run: |
-          if (-not (Test-Path "node_modules/three/build/three.module.js")) {
-            Write-Error "Three.js runtime module is missing from node_modules."
+          if (-not (Test-Path "src/vendor/three/three.module.js")) {
+            Write-Error "Vendored Three.js runtime module was not generated."
             exit 1
           }
-          if (-not (Test-Path "node_modules/three/examples/jsm/loaders/GLTFLoader.js")) {
-            Write-Error "Three.js GLTFLoader is missing from node_modules."
+          if (-not (Test-Path "src/vendor/three/addons/loaders/GLTFLoader.js")) {
+            Write-Error "Vendored Three.js GLTFLoader was not generated."
+            exit 1
+          }
+          if (-not (Test-Path "src/vendor/three/addons/exporters/GLTFExporter.js")) {
+            Write-Error "Vendored Three.js GLTFExporter was not generated."
             exit 1
           }
           if (-not (Test-Path "node_modules/electron-builder")) {
@@ -59,11 +63,12 @@ jobs:
             "src/renderer/studio.js",
             "src/renderer/studio.html",
             "src/shared/character.js",
-            "node_modules/three/build/three.module.js",
-            "node_modules/three/examples/jsm/loaders/GLTFLoader.js"
+            "src/vendor/three/three.module.js",
+            "src/vendor/three/addons/loaders/GLTFLoader.js",
+            "src/vendor/three/addons/exporters/GLTFExporter.js"
           )
           foreach ($item in $required) {
-            $path = Join-Path $extract ($item -replace '/', '\\')
+            $path = Join-Path $extract ($item -replace '/', '\')
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
               Write-Error "Missing from extracted app.asar: $item"
               exit 1
