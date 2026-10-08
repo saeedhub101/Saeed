@@ -30,6 +30,45 @@ jobs:
         shell: pwsh
         run: npm run dist -- --publish never
 
+      - name: Verify packaged runtime files
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "node_modules/three/build/three.module.js")) {
+            Write-Error "Three.js runtime module is missing from node_modules."
+            exit 1
+          }
+          if (-not (Test-Path "node_modules/three/examples/jsm/loaders/GLTFLoader.js")) {
+            Write-Error "Three.js GLTFLoader is missing from node_modules."
+            exit 1
+          }
+          if (-not (Test-Path "node_modules/electron-builder")) {
+            Write-Error "electron-builder is missing from node_modules."
+            exit 1
+          }
+          $asar = "dist/win-unpacked/resources/app.asar"
+          if (-not (Test-Path $asar)) {
+            Write-Error "Packaged app.asar was not produced."
+            exit 1
+          }
+          npx --no-install asar list $asar | Out-File "$env:TEMP/app-asar-list.txt"
+          $asarList = Get-Content "$env:TEMP/app-asar-list.txt" -Raw
+          $required = @(
+            "src/renderer/avatar.js",
+            "src/renderer/avatar.html",
+            "src/renderer/studio.js",
+            "src/renderer/studio.html",
+            "src/shared/character.js",
+            "node_modules/three/build/three.module.js",
+            "node_modules/three/examples/jsm/loaders/GLTFLoader.js"
+          )
+          foreach ($item in $required) {
+            if ($asarList -notmatch [regex]::Escape($item)) {
+              Write-Error "Missing from app.asar: $item"
+              exit 1
+            }
+            Write-Host "ASAR OK: $item"
+          }
+
       - name: Verify installer
         shell: pwsh
         run: |
