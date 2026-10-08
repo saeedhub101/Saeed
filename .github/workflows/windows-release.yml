@@ -50,7 +50,7 @@ jobs:
             Write-Error "Packaged app.asar was not produced."
             exit 1
           }
-          npx --no-install asar list $asar | Out-File "$env:TEMP/app-asar-list.txt"
+          npx --yes @electron/asar list "$asar" | Out-File "$env:TEMP/app-asar-list.txt"
           $asarList = Get-Content "$env:TEMP/app-asar-list.txt" -Raw
           $required = @(
             "src/renderer/avatar.js",
