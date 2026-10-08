@@ -68,6 +68,8 @@ jobs:
               Write-Error "Missing from extracted app.asar: $item"
               exit 1
             }
+            Write-Host "ASAR OK: $item"
+          }
 
       - name: Verify installer
         shell: pwsh
