@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Avatar</title>
+  <link rel="stylesheet" href="avatar.css">
+  <script type="importmap">
+    { "imports": { "three": "../../node_modules/three/build/three.module.js", "three/addons/": "../../node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="bubble" hidden></div>
+  <button id="mic" title="Microphone on / off" aria-label="Microphone on or off">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="3" width="6" height="11" rx="3"></rect>
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3"></path>
+      <path class="slash" d="M4 4l16 16"></path>
+    </svg>
+  </button>
+  <script type="module" src="avatar.js"></script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Avatar Studio</title>
+  <link rel="stylesheet" href="studio.css">
+  <script type="importmap">
+    { "imports": { "three": "../../node_modules/three/build/three.module.js", "three/addons/": "../../node_modules/three/examples/jsm/" } }
+  </script>
+</head>
+<body>
+  <header id="top">
+    <strong class="title">Avatar Studio</strong>
+    <button id="btnModel" class="btn">Change character…</button>
+    <label class="field">Model faces
+      <select id="yaw"><option value="0">the camera (+Z)</option><option value="180">away (−Z)</option></select>
+    </label>
+    <label class="chk"><input type="checkbox" id="chkSkel" checked> Show skeleton</label>
+    <span id="status" class="muted"></span>
+  </header>
+  <main>
+    <section id="view"><canvas id="c"></canvas></section>
+    <aside>
+      <nav id="tabs"></nav>
+      <div id="panel"></div>
+    </aside>
+  </main>
+  <div id="toast" hidden></div>
+  <script type="module" src="studio.js"></script>
+</body>
+</html>

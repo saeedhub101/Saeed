@@ -1,0 +1,31 @@
+:root { --mic-y: 30%; --accent: #8fb4ff; }
+html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; user-select: none; font-family: "Segoe UI", system-ui, sans-serif; }
+canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+canvas:active { cursor: grabbing; }
+
+#mic {
+  position: fixed; left: 50%; bottom: var(--mic-y); transform: translateX(-50%);
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.18); background: rgba(24,28,36,.82); color: #c9d2e0;
+  display: grid; place-items: center; cursor: pointer; padding: 0;
+  --level: 0;
+  box-shadow: 0 0 0 calc(var(--level) * 12px) rgba(143,180,255,.35);
+  transition: background .15s, color .15s;
+}
+#mic:hover { background: rgba(36,42,54,.95); }
+#mic .slash { display: block; }
+#mic.on { background: var(--accent); color: #0e1420; border-color: transparent; }
+#mic.on .slash { display: none; }
+#mic:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+#bubble {
+  position: fixed; left: 50%; top: 8%; transform: translate(-50%, -100%);
+  max-width: 260px; padding: 9px 13px; border-radius: 14px;
+  background: rgba(250,251,253,.96); color: #161a22; font-size: 14px; line-height: 1.35;
+  box-shadow: 0 2px 10px rgba(0,0,0,.25); pointer-events: none;
+}
+#bubble::after {
+  content: ""; position: absolute; left: 50%; bottom: -6px; width: 12px; height: 12px;
+  background: inherit; transform: translateX(-50%) rotate(45deg); border-radius: 2px;
+}
+@media (prefers-reduced-motion: reduce) { #mic { transition: none; } }

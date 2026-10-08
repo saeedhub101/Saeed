@@ -1,0 +1,76 @@
+:root {
+  --bg: #14171c; --panel: #1a1e25; --raise: #222731; --line: #2d3440; --text: #dfe4ec; --muted: #8b94a4;
+  --accent: #8fb4ff; --accent-ink: #0e1420; --warn: #ffb454; --danger: #ff7a7a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 "Segoe UI", system-ui, sans-serif; }
+body { display: grid; grid-template-rows: 46px 1fr; }
+
+#top { display: flex; align-items: center; gap: 16px; padding: 0 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+#top .title { font-size: 15px; font-weight: 600; margin-right: 6px; }
+#status { margin-left: auto; }
+main { display: grid; grid-template-columns: 1fr 440px; min-height: 0; }
+#view { position: relative; min-width: 0; background: radial-gradient(ellipse at 50% 30%, #272d38, #15181e 70%); }
+#view canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+aside { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid var(--line); }
+#tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+#tabs button { flex: 1 1 auto; padding: 10px 8px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font: inherit; cursor: pointer; }
+#tabs button:hover { color: var(--text); }
+#tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+#panel { flex: 1; overflow-y: auto; padding: 14px; }
+
+h3 { margin: 18px 0 8px; font-size: 13px; font-weight: 600; }
+h3:first-child { margin-top: 0; }
+p { margin: 6px 0 10px; }
+.muted { color: var(--muted); }
+.warn { color: var(--warn); }
+.row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.row.dim .lbl { color: var(--muted); }
+.lbl { flex: 0 0 120px; }
+.grow { flex: 1; min-width: 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+
+button.btn, .btns button {
+  padding: 5px 11px; background: var(--raise); color: var(--text); border: 1px solid var(--line);
+  border-radius: 5px; font: inherit; cursor: pointer;
+}
+button.btn:hover, .btns button:hover { border-color: #46506a; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; }
+button.danger { color: var(--danger); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type=text], input[type=number], select {
+  background: #0f1216; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px; font: inherit; min-width: 0;
+}
+input[type=number] { width: 66px; }
+select { max-width: 100%; }
+input[type=range] { accent-color: var(--accent); }
+.chk { display: inline-flex; align-items: center; gap: 6px; }
+.field { display: inline-flex; align-items: center; gap: 8px; }
+
+.slider { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+.slider .lbl { flex: 0 0 150px; }
+.slider input[type=range] { flex: 1; min-width: 0; }
+
+.list { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 12px; }
+.list button { padding: 3px 9px; border-radius: 12px; background: var(--raise); border: 1px solid var(--line); color: var(--text); font: inherit; cursor: pointer; }
+.list button.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+.list button.off { color: var(--muted); border-style: dashed; }
+
+.transport { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.krow, .rigrow { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
+.krow input[type=number] { width: 58px; }
+.rigrow input[type=text] { width: 108px; }
+.rigrow select { width: 96px; }
+.rigrow input[type=number] { width: 54px; }
+.x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 6px; }
+.x:hover { color: var(--danger); }
+
+details { margin: 10px 0; }
+summary { cursor: pointer; color: var(--muted); }
+.tree { margin: 6px 0; max-height: 240px; overflow: auto; font-family: Consolas, monospace; font-size: 12px; }
+.tree div { padding: 1px 4px; cursor: pointer; white-space: nowrap; border-radius: 3px; }
+.tree div:hover { background: var(--raise); }
+.box { border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; margin: 10px 0; background: var(--raise); }
+.notice { padding: 18px 4px; color: var(--muted); }
+
+#toast { position: fixed; left: 16px; bottom: 16px; background: var(--raise); border: 1px solid var(--line); border-left: 3px solid var(--warn); padding: 8px 12px; border-radius: 5px; max-width: 420px; }
