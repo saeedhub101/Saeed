@@ -14,7 +14,12 @@
     addEventListener('unhandledrejection', function (e) { showError(String(e.reason && e.reason.stack || e.reason)); });
   </script>
   <script type="importmap">
-    { "imports": { "three": "../vendor/three/three.module.js", "three/addons/": "../vendor/three/addons/" } }
+    {
+      "imports": {
+        "three": "../../node_modules/three/build/three.module.js",
+        "three/addons/": "../../node_modules/three/examples/jsm/"
+      }
+    }
   </script>
 </head>
 <body>
