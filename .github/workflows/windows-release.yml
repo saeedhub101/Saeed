@@ -50,8 +50,9 @@ jobs:
             Write-Error "Packaged app.asar was not produced."
             exit 1
           }
-          npx --yes @electron/asar list "$asar" | Out-File "$env:TEMP/app-asar-list.txt"
-          $asarList = Get-Content "$env:TEMP/app-asar-list.txt" -Raw
+          $extract = "$env:TEMP/app-asar-extracted"
+          if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+          npx --yes @electron/asar extract "$asar" "$extract"
           $required = @(
             "src/renderer/avatar.js",
             "src/renderer/avatar.html",
@@ -62,10 +63,13 @@ jobs:
             "node_modules/three/examples/jsm/loaders/GLTFLoader.js"
           )
           foreach ($item in $required) {
-            if ($asarList -notmatch [regex]::Escape($item)) {
-              Write-Error "Missing from app.asar: $item"
+            $path = Join-Path $extract ($item -replace '/', '\\')
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              Write-Error "Missing from extracted app.asar: $item"
               exit 1
             }
+            Write-Host "ASAR OK: $item"
+          }
             Write-Host "ASAR OK: $item"
           }
 
