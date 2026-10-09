@@ -1,0 +1,22 @@
+body { display: block; overflow-y: auto; }
+#top { position: sticky; top: 0; z-index: 5; gap: 14px; }
+#top .spacer { flex: 1; }
+#tabs2 { display: flex; gap: 4px; }
+#tabs2 button { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 12px 10px; font: inherit; cursor: pointer; }
+#tabs2 button.on { color: var(--text); border-bottom-color: var(--accent); }
+#root { max-width: 860px; margin: 0 auto; padding: 18px 20px 60px; }
+.card { background: var(--raise); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin: 0 0 12px; }
+.card h4 { margin: 0 0 2px; font-size: 14px; }
+.card .meta { color: var(--muted); font-size: 12px; }
+.card .top { display: flex; align-items: center; gap: 10px; }
+.card .top .grow { min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 8px 0 4px; }
+.chip { font-size: 11px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.chip.write { color: var(--warn); border-color: #6b5530; }
+.chip.system { color: var(--danger); border-color: #6b3434; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #566; display: inline-block; margin-right: 6px; }
+.dot.on { background: #6fd08c; }
+.bar { height: 6px; background: #0f1216; border-radius: 3px; overflow: hidden; margin: 8px 0 2px; }
+.bar > div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+.form { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
+.empty { color: var(--muted); padding: 30px 0; text-align: center; }

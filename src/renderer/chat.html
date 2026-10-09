@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Chat with Saeed</title>
+  <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="chat.css">
+  <script>
+    function showError(m) {
+      var d = document.getElementById("err");
+      if (!d) { d = document.createElement("pre"); d.id = "err"; d.style.cssText = "position:fixed;left:6px;right:6px;top:6px;margin:0;padding:8px;background:#5a1414;color:#fff;font:12px Consolas,monospace;z-index:99;white-space:pre-wrap;max-height:50%;overflow:auto;user-select:text"; document.body.appendChild(d); }
+      d.textContent += m + "\n";
+    }
+    addEventListener("error", function (e) { showError(e.message || ("Could not load " + (e.target && (e.target.src || e.target.href)))); }, true);
+    addEventListener("unhandledrejection", function (e) { showError(String(e.reason && e.reason.stack || e.reason)); });
+  </script>
+</head>
+<body>
+  <header id="top"><strong class="title">Saeed</strong><span id="state" class="muted"></span>
+    <span class="spacer"></span>
+    <button id="stop" class="btn">Stop</button><button id="clear" class="btn">Clear</button></header>
+  <div id="list"></div>
+  <div id="thumbs"></div>
+  <div id="bar"><button id="attach" class="btn" title="Attach an image (or paste one)">📎</button><input id="file" type="file" accept="image/*" multiple hidden><textarea id="input" rows="2" placeholder="Type a message… (Enter to send)" dir="auto"></textarea><button id="send" class="btn primary">Send</button></div>
+  <script type="module" src="chat.js"></script>
+</body>
+</html>

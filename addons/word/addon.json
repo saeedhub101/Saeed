@@ -1,0 +1,11 @@
+{
+  "id": "word", "name": "Word", "version": "1.0.0", "author": "Saeed",
+  "description": "Read .docx documents and create new ones with headings, paragraphs and tables.",
+  "main": "index.js", "permissions": ["files:read", "files:write"], "idleSeconds": 60,
+  "tools": [
+    { "name": "read", "risk": "read", "description": "Read the text of a .docx file.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "maxChars": { "type": "number" } }, "required": ["path"] } },
+    { "name": "create", "risk": "write", "description": "Create a .docx. blocks: [{type:'heading',text,level?}, {type:'paragraph',text}, {type:'table',rows:[[...]]}]. Set rtl:true for Arabic documents.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "rtl": { "type": "boolean" }, "blocks": { "type": "array", "items": { "type": "object", "properties": { "type": { "type": "string", "enum": ["heading", "paragraph", "table"] }, "text": { "type": "string" }, "level": { "type": "number" }, "rows": { "type": "array", "items": { "type": "array", "items": {} } } }, "required": ["type"] } } }, "required": ["path", "blocks"] } }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "ocr", "name": "OCR (text from images)", "version": "1.0.0", "author": "Saeed",
+  "description": "Read text from pictures and scanned pages (Arabic and English) on this PC.",
+  "main": "index.js", "permissions": ["files:read"], "idleSeconds": 45,
+  "tools": [
+    { "name": "image_to_text", "risk": "read", "description": "Read the text in an image file (png, jpg, bmp). lang: eng, ara or ara+eng.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "lang": { "type": "string" } }, "required": ["path"] } }
+  ],
+  "build": { "prepare": "prepare.js" }
+}

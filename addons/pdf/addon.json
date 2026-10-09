@@ -1,0 +1,9 @@
+{
+  "id": "pdf", "name": "PDF", "version": "1.0.0", "author": "Saeed",
+  "description": "Read the text of PDF files, page by page. For scanned pages use the OCR add-on or attach the page image in the chat.",
+  "main": "index.js", "permissions": ["files:read"], "idleSeconds": 60,
+  "tools": [
+    { "name": "read", "risk": "read", "description": "Read text from a PDF. Optional page range (1-based). Returns the text of each page.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "fromPage": { "type": "number" }, "toPage": { "type": "number" }, "maxChars": { "type": "number" } }, "required": ["path"] } }
+  ]
+}

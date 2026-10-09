@@ -1,0 +1,1 @@
+{ "name": "saeed-addon-ocr", "version": "1.0.0", "private": true, "dependencies": { "tesseract.js": "^5.1.1" } }

@@ -1,21 +1,28 @@
 {
   "name": "avatar-agent",
   "productName": "Avatar Agent",
-  "version": "0.1.0",
-  "description": "Desktop 3D avatar: transparent character window, tray app, and a studio for bones, poses and motions.",
+  "version": "0.3.0",
+  "description": "Saeed: desktop 3D avatar assistant (voice, chat, brain) with a studio for bones, poses and motions.",
   "main": "src/main/main.js",
   "author": "Saeed",
   "license": "MIT",
   "scripts": {
-    "start": "electron .",
-    "dist": "node scripts/vendor.js && electron-builder --win nsis"
+    "postinstall": "node scripts/vendor.js",
+    "start": "node scripts/vendor.js && electron .",
+    "predist": "node scripts/vendor.js",
+    "dist": "electron-builder --win nsis",
+    "release": "node scripts/vendor.js && electron-builder --win nsis --publish always",
+    "build-addons": "node scripts/build-addons.js"
   },
   "dependencies": {
-    "three": "0.170.0"
+    "ws": "^8.18.0",
+    "adm-zip": "^0.5.16",
+    "electron-updater": "^6.3.9"
   },
   "devDependencies": {
     "electron": "^33.2.1",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "three": "0.170.0"
   },
   "build": {
     "appId": "com.avataragent.app",
@@ -24,12 +31,8 @@
       "output": "dist"
     },
     "files": [
-      "src/**",
-      "package.json",
-      "node_modules/three/**",
-      "!node_modules/three/src/**",
-      "!node_modules/three/examples/**",
-      "!node_modules/three/build/{three.cjs,three.min.js,three.module.min.js}"
+      "src/**/*",
+      "package.json"
     ],
     "win": {
       "target": [
@@ -50,6 +53,15 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Avatar Agent"
     },
-    "asar": true
+    "asarUnpack": [
+      "src/main/addon-host.js"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "OWNER",
+        "repo": "saeed"
+      }
+    ]
   }
 }

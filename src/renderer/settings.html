@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Saeed settings</title>
+  <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="settings.css">
+  <script>
+    function showError(m) {
+      var d = document.getElementById("err");
+      if (!d) { d = document.createElement("pre"); d.id = "err"; d.style.cssText = "position:fixed;left:6px;right:6px;top:6px;margin:0;padding:8px;background:#5a1414;color:#fff;font:12px Consolas,monospace;z-index:99;white-space:pre-wrap;max-height:50%;overflow:auto;user-select:text"; document.body.appendChild(d); }
+      d.textContent += m + "\n";
+    }
+    addEventListener("error", function (e) { showError(e.message || ("Could not load " + (e.target && (e.target.src || e.target.href)))); }, true);
+    addEventListener("unhandledrejection", function (e) { showError(String(e.reason && e.reason.stack || e.reason)); });
+  </script>
+</head>
+<body>
+  <header id="top"><strong class="title">Saeed settings</strong><span class="muted">Changes are saved automatically.</span></header>
+  <div id="root"></div>
+  <script type="module" src="settings.js"></script>
+</body>
+</html>

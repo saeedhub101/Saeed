@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Character } from '../shared/character.js';
-import { BONES, autoMap } from '../shared/schema.js';
+import { BONES, GROUPS, groupOf, autoMap } from '../shared/schema.js';
 import { builtinClips, sampleTrack, INTENTS } from '../shared/clips.js';
-import { RIG_TEMPLATES, makeTemplate } from '../shared/rigbuilder.js';
+import { RIG_TEMPLATES, makeTemplate, makeFingers, makeFace } from '../shared/rigbuilder.js';
 
 const api = window.api;
 const $ = (id) => document.getElementById(id);
@@ -91,13 +91,14 @@ async function reloadModel() {
   try {
     await ch.load(toAB(buf), cfg);
     ch.showSkeleton($('chkSkel').checked);
+    applyAcc();
     $('status').textContent = ch.allBones.length ? `${ch.allBones.length} bones` : 'No skeleton in this model';
   } catch (e) { console.error(e); ch.unload(); $('status').textContent = 'This file could not be read'; }
   setTab(tab);
 }
 
 /* ============ tabs ============ */
-const TABS = [['bones', 'Bones'], ['pose', 'Pose'], ['fix', 'Fix motions'], ['create', 'Create motion'], ['rig', 'Rig builder'], ['test', 'Test']];
+const TABS = [['bones', 'Bones'], ['pose', 'Pose'], ['fix', 'Fix motions'], ['create', 'Create motion'], ['face', 'Face'], ['acc', 'Accessories'], ['rig', 'Rig builder'], ['test', 'Test']];
 function setTab(t) {
   tab = t;
   for (const b of $('tabs').children) b.classList.toggle('on', b.dataset.tab === t);
@@ -120,8 +121,16 @@ for (const [id, label] of TABS) $('tabs').append(h('button', { 'data-tab': id, o
 /* ============ shared widgets ============ */
 const mappedBones = () => BONES.filter((b) => ch.map[b.id]);
 function chips(ids, current, onPick) {
-  return h('div', { class: 'list' }, ids.map((id) => h('button', { class: id === current ? 'on' : '', onclick: () => onPick(id) },
-    BONES.find((b) => b.id === id)?.label || id)));
+  const btn = (id) => h('button', { class: id === current ? 'on' : '', onclick: () => onPick(id) }, BONES.find((b) => b.id === id)?.label || id);
+  const box = h('div', {});
+  for (const [g, label] of GROUPS) {
+    const sub = ids.filter((id) => groupOf(id) === g);
+    if (!sub.length) continue;
+    const list = h('div', { class: 'list' }, sub.map(btn));
+    if (g === 'body') box.append(list);
+    else box.append(h('details', { open: sub.includes(current) }, h('summary', {}, `${label} (${sub.length})`), list));
+  }
+  return box;
 }
 const effectiveMap = () => (Object.keys(cfg.boneMap).length ? cfg.boneMap : autoMap(ch.allBones));
 const markName = (n) => { markTarget = ch.allBones.find((b) => b.name === n) || null; };
@@ -132,12 +141,19 @@ function panelBones() {
   const names = [...new Set(ch.allBones.map((b) => b.name))];
   const eff = effectiveMap();
   const setMap = (m) => { cfg.boneMap = { __manual: true, ...m }; save({ boneMap: cfg.boneMap }); ch.applyConfig(cfg); renderPanel(); };
-  const rows = BONES.map(({ id, label }) => {
+  const mkRow = ({ id, label }) => {
     const cur = eff[id] || '';
     return h('div', { class: 'row' + (cur ? '' : ' dim'), onmouseenter: () => markName(cur), onmouseleave: () => (markTarget = null) },
       h('span', { class: 'lbl' }, label),
       h('select', { class: 'grow', value: cur, onchange: (e) => { const m = { ...eff }; if (e.target.value) m[id] = e.target.value; else delete m[id]; setMap(m); } },
         h('option', { value: '' }, '— none —'), names.map((n) => h('option', { value: n }, n))));
+  };
+  const rows = GROUPS.map(([g, title]) => {
+    const defs = BONES.filter((b) => b.group === g);
+    const rs = defs.map(mkRow);
+    if (g === 'body') return rs;
+    const n = defs.filter((d) => eff[d.id]).length;
+    return h('details', { open: n > 0 && n < 6 }, h('summary', {}, `${title} — ${n}/${defs.length} matched`), rs);
   });
   const tree = h('div', { class: 'tree' });
   (function walk(o, d) {
@@ -418,6 +434,65 @@ function panelCreate() {
   return out;
 }
 
+/* ============ Accessories tab ============ */
+let accList = await api.accessoriesList();
+const loadAccFile = async (d) => toAB(await api.addonFile(d.addon, d.file));
+const applyAcc = () => ch.setAccessories(accList, cfg.accessories, loadAccFile);
+api.onAddonsChanged(async () => { accList = await api.accessoriesList(); applyAcc(); if (tab === 'acc') renderPanel(); });
+
+function panelAcc() {
+  if (!accList.length) return notice('No accessories yet. Open Add-ons from the tray menu and install an accessories add-on (for example "party-pack").');
+  cfg.accessories ||= {};
+  const apply = () => { save({ accessories: cfg.accessories }); applyAcc(); };
+  return h('div', {},
+    h('h3', {}, 'Accessories'),
+    h('p', { class: 'muted' }, 'They attach to a bone and follow its movement. Positions are in metres for a character 1.7 m tall.'),
+    accList.map((d) => {
+      const s = (cfg.accessories[d.id] ||= {});
+      const off = s.offset || d.offset || [0, 0, 0], rot = s.rot || d.rotation || [0, 0, 0];
+      return h('div', { class: 'box' },
+        h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!s.on, onchange: (e) => { s.on = e.target.checked; apply(); renderPanel(); } }), ` ${d.name} `, h('span', { class: 'muted' }, `(${d.bone || 'head'})`)),
+        s.on ? [
+          ['Left – right', 0], ['Down – up', 1], ['Back – front', 2]].map(([l, i]) => slider(l, off[i], -0.5, 0.5, 0.005, (v) => { const o = [...(s.offset || d.offset || [0, 0, 0])]; o[i] = v; s.offset = o; apply(); })) : null,
+        s.on ? ['Tilt (X)', 'Turn (Y)', 'Roll (Z)'].map((l, i) => slider(l, rot[i], -180, 180, 1, (v) => { const r = [...(s.rot || d.rotation || [0, 0, 0])]; r[i] = v; s.rot = r; apply(); })) : null,
+        s.on ? slider('Size', s.scale ?? d.scale ?? 1, 0.2, 3, 0.05, (v) => { s.scale = v; apply(); }) : null,
+        s.on ? h('div', { class: 'btns' }, h('button', { onclick: () => { cfg.accessories[d.id] = { on: true }; apply(); renderPanel(); } }, 'Reset position')) : null);
+    }));
+}
+
+/* ============ Face tab (mouth shape keys, jaw, eyes) ============ */
+let mouthTimer = 0;
+function panelFace() {
+  const names = new Map();
+  for (const m of ch.morphs) for (const [name, i] of Object.entries(m.morphTargetDictionary)) {
+    if (!names.has(name)) names.set(name, []);
+    names.get(name).push([m, i]);
+  }
+  const found = ['open', 'aa', 'ih', 'ou', 'ee', 'oh', 'blink'].map((k) => `${k}: ${(ch.faceIdx[k] || []).length}`).join('   ');
+  const V = ['aa', 'ee', 'ih', 'oh', 'ou'];
+  const sliders = [...names.entries()].slice(0, 120).map(([name, list]) =>
+    slider(name, list[0][0].morphTargetInfluences[list[0][1]] || 0, 0, 1, 0.01, (v) => { for (const [m, i] of list) m.morphTargetInfluences[i] = v; }));
+  return h('div', {},
+    h('h3', {}, 'Mouth and face'),
+    h('p', { class: 'muted' }, 'While Saeed speaks, the jaw bone opens from the sound level and the letter shape keys (A, I, U, E, O or aa, ih, ou, ee, oh) follow the voice.'),
+    h('p', {}, `Jaw bone: ${ch.map.jaw ? 'matched' : 'not matched (Bones tab)'}.  Eye bones: ${ch.map.leftEye && ch.map.rightEye ? 'matched' : 'not matched'}.`),
+    h('p', { class: 'muted' }, `Shape keys found: ${found}`),
+    names.size ? null : h('p', { class: 'warn' }, 'This model has no shape keys. Only the jaw bone will move.'),
+    h('div', { class: 'btns' },
+      h('button', { class: 'primary btn', onclick: () => {
+        clearInterval(mouthTimer);
+        const t0 = performance.now();
+        mouthTimer = setInterval(() => {
+          const t = (performance.now() - t0) / 1000;
+          if (t > 4) { clearInterval(mouthTimer); ch.setMouth({ open: 0 }); return; }
+          ch.setMouth({ open: 0.3 + 0.6 * Math.abs(Math.sin(t * 9)), vowel: V[Math.floor(t * 3) % 5] });
+        }, 45);
+      } }, 'Test talking (4 s)'),
+      h('button', { onclick: () => { clearInterval(mouthTimer); ch.setMouth({ open: 1 }); } }, 'Open wide'),
+      h('button', { onclick: () => { clearInterval(mouthTimer); ch.setMouth({ open: 0 }); } }, 'Close')),
+    names.size ? h('details', {}, h('summary', {}, `All shape keys (${names.size})`), sliders) : null);
+}
+
 /* ============ Rig builder tab ============ */
 let draft = null;      // { bones: [{name,parent,pos}], radius }
 let rigGroup = null;
@@ -447,6 +522,24 @@ async function exportRigged() {
     await reloadModel();
     flash('Saved. The new file is now your character.');
   } catch (e) { console.error(e); flash('Export failed: ' + e.message); }
+}
+
+function addFingers() {
+  const H = ch.box.max.y - ch.box.min.y, cx = (ch.box.min.x + ch.box.max.x) / 2;
+  const have = new Set(draft.bones.map((b) => b.name));
+  for (const side of ['left', 'right']) {
+    const hand = draft.bones.find((b) => b.name === side + 'Hand');
+    if (!hand) { flash(`Add ${side}Hand first (use a template that has arms).`); continue; }
+    const dirX = Math.sign(hand.pos[0] - cx) || (side === 'left' ? 1 : -1);
+    for (const b of makeFingers(side, hand.pos, H, dirX)) if (!have.has(b.name)) draft.bones.push(b);
+  }
+  renderPanel(); drawDraft();
+}
+function addFace() {
+  const have = new Set(draft.bones.map((b) => b.name));
+  const hasHead = have.has('head');
+  for (const b of makeFace(ch.box, cfg.modelYaw)) if (!have.has(b.name)) draft.bones.push(hasHead ? b : { ...b, parent: null });
+  renderPanel(); drawDraft();
 }
 
 function buildRigNow() {
@@ -496,14 +589,14 @@ function panelRig() {
       const c = last ? last.pos : [(ch.box.min.x + ch.box.max.x) / 2, (ch.box.min.y + ch.box.max.y) / 2, (ch.box.min.z + ch.box.max.z) / 2];
       draft.bones.push({ name: 'bone' + (draft.bones.length + 1), parent: last ? last.name : null, pos: c.map(round) });
       renderPanel(); drawDraft();
-    } }, 'Add bone')),
+    } }, 'Add bone'), h('button', { onclick: addFingers }, 'Add fingers (both hands)'), h('button', { onclick: addFace }, 'Add eyes and jaw')),
     slider('Influence radius (% of height)', draft.radius * 100, 3, 40, 1, (v) => { draft.radius = v / 100; }),
     h('p', { class: 'muted' }, 'Each bone moves the mesh around it. Parts far from every bone stay still. A larger radius makes softer, wider bends.'),
     h('div', { class: 'btns' }, h('button', { class: 'primary btn', onclick: buildRigNow }, 'Build skeleton')));
 }
 
 /* ============ boot ============ */
-const PANELS = { bones: panelBones, pose: panelPose, fix: panelFix, create: panelCreate, rig: panelRig, test: panelTest };
+const PANELS = { bones: panelBones, pose: panelPose, fix: panelFix, create: panelCreate, face: panelFace, acc: panelAcc, rig: panelRig, test: panelTest };
 
 $('btnModel').onclick = () => api.pickModel();
 $('yaw').value = String(cfg.modelYaw || 0);
@@ -514,7 +607,8 @@ api.onConfig((c) => {
   const reload = c.modelPath !== cfg.modelPath || JSON.stringify(c.customRig) !== JSON.stringify(cfg.customRig);
   cfg = c; cfg.clips ||= {}; cfg.overrides ||= {}; cfg.restPose ||= {}; cfg.boneMap ||= {};
   $('yaw').value = String(cfg.modelYaw || 0);
-  if (reload) reloadModel(); else { ch.applyConfig(cfg); renderPanel(); }
+  cfg.accessories ||= {};
+  if (reload) reloadModel(); else { ch.applyConfig(cfg); applyAcc(); renderPanel(); }
 });
 api.onStudioTab((t) => setTab(t));
 

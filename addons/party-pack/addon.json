@@ -1,0 +1,26 @@
+{
+  "id": "party-pack", "name": "Party pack", "version": "1.0.0", "author": "Saeed",
+  "description": "Accessories for Saeed: party hat, white cap, glasses, flag and a flower bouquet. No code, nothing runs in the background.",
+  "permissions": [],
+  "accessories": [
+    { "id": "party-hat", "name": "Party hat", "bone": "head", "offset": [0, 0.2, 0.01], "parts": [
+      { "shape": "cone", "size": [0.09, 0.22], "color": "#e8453c", "position": [0, 0.11, 0] },
+      { "shape": "sphere", "size": [0.02], "color": "#f7d14a", "position": [0, 0.23, 0] } ] },
+    { "id": "white-cap", "name": "White cap", "bone": "head", "offset": [0, 0.16, 0.0], "parts": [
+      { "shape": "sphere", "size": [0.105], "color": "#f4f1ea", "scale": [1, 0.62, 1.05], "position": [0, 0.03, 0] } ] },
+    { "id": "glasses", "name": "Glasses", "bone": "head", "offset": [0, 0.1, 0.1], "parts": [
+      { "shape": "torus", "size": [0.032, 0.004], "color": "#1b1f27", "position": [-0.04, 0, 0] },
+      { "shape": "torus", "size": [0.032, 0.004], "color": "#1b1f27", "position": [0.04, 0, 0] },
+      { "shape": "box", "size": [0.016, 0.004, 0.004], "color": "#1b1f27", "position": [0, 0.006, 0] } ] },
+    { "id": "flag", "name": "Flag", "bone": "rightHand", "offset": [0, 0.05, 0.02], "parts": [
+      { "shape": "cylinder", "size": [0.008, 0.9], "color": "#8b6b3e", "position": [0, 0.35, 0] },
+      { "shape": "plane", "size": [0.34, 0.22], "color": "#2f7d4f", "position": [0.17, 0.68, 0] },
+      { "shape": "plane", "size": [0.34, 0.07], "color": "#ffffff", "position": [0.17, 0.68, 0.001] } ] },
+    { "id": "bouquet", "name": "Flower bouquet", "bone": "leftHand", "offset": [0, 0.08, 0.05], "parts": [
+      { "shape": "cylinder", "size": [0.012, 0.012, 0.22], "color": "#3d7a3a", "position": [0, 0.02, 0] },
+      { "shape": "sphere", "size": [0.05], "color": "#d6457a", "position": [0, 0.17, 0] },
+      { "shape": "sphere", "size": [0.04], "color": "#f2c230", "position": [-0.05, 0.14, 0.01] },
+      { "shape": "sphere", "size": [0.04], "color": "#e8453c", "position": [0.05, 0.14, -0.01] },
+      { "shape": "sphere", "size": [0.035], "color": "#ffffff", "position": [0, 0.13, 0.05] } ] }
+  ]
+}

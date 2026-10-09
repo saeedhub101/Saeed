@@ -23,6 +23,35 @@ export function makeTemplate(kind, box, yaw = 0) {
   return [];
 }
 
+/** Five fingers x 4 bones for one hand, laid out from the wrist (T-pose). dirX is +1 / -1: the way the fingers point along X. */
+export function makeFingers(side, wrist, H, dirX) {
+  const spec = { Thumb: [0.012, 0.016, 0.02], Index: [0.03, 0.022, 0.012], Middle: [0.032, 0.024, 0.004], Ring: [0.03, 0.022, -0.004], Pinky: [0.026, 0.017, -0.012] };
+  const out = [];
+  for (const [f, [x0, len, z]] of Object.entries(spec)) {
+    let parent = side + 'Hand';
+    for (let j = 1; j <= 4; j++) {
+      const name = `${side}${f}${j}`;
+      const dz = f === 'Thumb' ? 0.006 * (j - 1) : 0, dy = f === 'Thumb' ? 0.003 * H * (j - 1) : 0;
+      out.push({ name, parent, pos: [+(wrist[0] + dirX * (x0 + (j - 1) * len) * H).toFixed(4), +(wrist[1] - dy).toFixed(4), +(wrist[2] + (z + dz) * H).toFixed(4)] });
+      parent = name;
+    }
+  }
+  return out;
+}
+
+/** Eyes and jaw, placed on the head of a model sized by `box`. */
+export function makeFace(box, yaw = 0) {
+  const H = box.max.y - box.min.y;
+  const cx = (box.min.x + box.max.x) / 2, cz = (box.min.z + box.max.z) / 2, y0 = box.min.y;
+  const sx = yaw === 180 ? -1 : 1;
+  const P = (x, y, z) => [+(cx + sx * x * H).toFixed(4), +(y0 + y * H).toFixed(4), +(cz + z * H).toFixed(4)];
+  return [
+    { name: 'leftEye', parent: 'head', pos: P(0.018, 0.935, 0.045) },
+    { name: 'rightEye', parent: 'head', pos: P(-0.018, 0.935, 0.045) },
+    { name: 'jaw', parent: 'head', pos: P(0, 0.905, 0.02) },
+  ];
+}
+
 function distSeg(x, y, z, s) {
   const abx = s.bx - s.ax, aby = s.by - s.ay, abz = s.bz - s.az;
   const apx = x - s.ax, apy = y - s.ay, apz = z - s.az;
@@ -42,7 +71,7 @@ function skin(geometry, segs, radius) {
     let list = [], sum = 0;
     for (const s of segs) {
       const d = distSeg(x, y, z, s);
-      if (d < radius) { const w = (1 - d / radius) ** 2; list.push([s.index, w]); sum += w; }
+      if (d < s.rad) { const w = (1 - d / s.rad) ** 2; list.push([s.index, w]); sum += w; }
     }
     const rootW = Math.max(0, 1 - sum);
     if (rootW > 0) list.push([0, rootW]);
@@ -100,7 +129,8 @@ export function buildRig(model, rig) {
       e = a.clone().add(a.clone().sub(pp).multiplyScalar(0.5));
       if (e.distanceTo(a) < 0.02 * H) e.y -= 0.02 * H;
     }
-    segs.push({ index, ax: a.x, ay: a.y, az: a.z, bx: e.x, by: e.y, bz: e.z, len2: Math.max(1e-8, e.distanceToSquared(a)) });
+    const len2 = Math.max(1e-8, e.distanceToSquared(a));
+    segs.push({ index, ax: a.x, ay: a.y, az: a.z, bx: e.x, by: e.y, bz: e.z, len2, rad: Math.min(radius, Math.max(0.025 * H, Math.sqrt(len2) * 1.6)) });
   });
 
   const meshes = [];

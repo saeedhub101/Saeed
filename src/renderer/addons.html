@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Saeed add-ons</title>
+  <link rel="stylesheet" href="studio.css">
+  <link rel="stylesheet" href="addons.css">
+  <script>
+    function showError(m) {
+      var d = document.getElementById("err");
+      if (!d) { d = document.createElement("pre"); d.id = "err"; d.style.cssText = "position:fixed;left:6px;right:6px;top:6px;margin:0;padding:8px;background:#5a1414;color:#fff;font:12px Consolas,monospace;z-index:99;white-space:pre-wrap;max-height:50%;overflow:auto;user-select:text"; document.body.appendChild(d); }
+      d.textContent += m + "\n";
+    }
+    addEventListener("error", function (e) { showError(e.message || ("Could not load " + (e.target && (e.target.src || e.target.href)))); }, true);
+    addEventListener("unhandledrejection", function (e) { showError(String(e.reason && e.reason.stack || e.reason)); });
+  </script>
+</head>
+<body>
+  <header id="top"><strong class="title">Add-ons</strong>
+    <nav id="tabs2"><button data-t="installed" class="on">Installed</button><button data-t="store">Store</button></nav>
+    <span class="spacer"></span><button id="zip" class="btn">Install from file…</button></header>
+  <div id="root"></div>
+  <script type="module" src="addons.js"></script>
+</body>
+</html>

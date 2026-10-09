@@ -70,6 +70,48 @@ const BUILTIN = {
     spine: [[0, 0, 0, 0], [0.8, 10, 0, 0], [2.8, 10, 0, 0], [3.6, 0, 0, 0]],
     chest: [[0, 0, 0, 0], [0.8, 8, 0, 0], [2.8, 8, 0, 0], [3.6, 0, 0, 0]],
   }),
+  listen: C('listen', 3, true, {
+    head: [[0, 0, 0, 0], [1.5, 3, 0, -5], [3, 0, 0, 0]],
+    spine: [[0, 0, 0, 0], [1.5, 2, 0, 0], [3, 0, 0, 0]],
+  }),
+  // Postures (held, with slow breathing). hips.p is a fraction of body height.
+  sit_idle: C('sit_idle', 6, true, {
+    hips: [[0, 0, 0, 0, [0, -0.26, 0]], [3, 0, 0, 0, [0, -0.258, 0]], [6, 0, 0, 0, [0, -0.26, 0]]],
+    leftUpperLeg: [[0, -90, 0, 6], [6, -90, 0, 6]],
+    rightUpperLeg: [[0, -90, 0, -6], [6, -90, 0, -6]],
+    leftLowerLeg: [[0, 90, 0, 0], [6, 90, 0, 0]],
+    rightLowerLeg: [[0, 90, 0, 0], [6, 90, 0, 0]],
+    spine: [[0, 3, 0, 0], [3, 4, 0, 0], [6, 3, 0, 0]],
+    chest: [[0, 2, 0, 0], [3, 3, 0, 0], [6, 2, 0, 0]],
+    leftUpperArm: [[0, -20, 0, 4], [6, -20, 0, 4]],
+    rightUpperArm: [[0, -20, 0, -4], [6, -20, 0, -4]],
+    leftLowerArm: [[0, -55, 0, 0], [6, -55, 0, 0]],
+    rightLowerArm: [[0, -55, 0, 0], [6, -55, 0, 0]],
+    head: [[0, -2, 0, 0], [3, -1, 2, 0], [6, -2, 0, 0]],
+  }),
+  lie_idle: C('lie_idle', 7, true, {
+    hips: [[0, 0, 0, 90, [0, -0.43, 0]], [3.5, 0, 0, 90, [0, -0.428, 0]], [7, 0, 0, 90, [0, -0.43, 0]]],
+    chest: [[0, 0, 0, 0], [3.5, 2.5, 0, 0], [7, 0, 0, 0]],
+    head: [[0, 0, 0, 4], [3.5, 0, 0, 5], [7, 0, 0, 4]],
+    leftLowerLeg: [[0, 12, 0, 0], [7, 12, 0, 0]],
+    rightLowerLeg: [[0, 12, 0, 0], [7, 12, 0, 0]],
+  }),
+  sleep_idle: C('sleep_idle', 9, true, {
+    hips: [[0, 0, 0, 90, [0, -0.43, 0]], [4.5, 0, 0, 90, [0, -0.427, 0]], [9, 0, 0, 90, [0, -0.43, 0]]],
+    chest: [[0, 0, 0, 0], [4.5, 3, 0, 0], [9, 0, 0, 0]],
+    head: [[0, 4, 0, 8], [4.5, 5, 0, 9], [9, 4, 0, 8]],
+    leftLowerLeg: [[0, 18, 0, 0], [9, 18, 0, 0]],
+    rightLowerLeg: [[0, 18, 0, 0], [9, 18, 0, 0]],
+  }),
+  // Muezzin: hands raised beside the face, head slightly up. The jaw opens from the audio level.
+  adhan: C('adhan', 5, true, {
+    leftUpperArm: [[0, -20, 0, 70], [2.5, -22, 0, 72], [5, -20, 0, 70]],
+    rightUpperArm: [[0, -20, 0, -70], [2.5, -22, 0, -72], [5, -20, 0, -70]],
+    leftLowerArm: [[0, 0, 0, 110], [2.5, 0, 0, 108], [5, 0, 0, 110]],
+    rightLowerArm: [[0, 0, 0, -110], [2.5, 0, 0, -108], [5, 0, 0, -110]],
+    head: [[0, -12, 0, 0], [2.5, -14, 3, 0], [5, -12, 0, 0]],
+    chest: [[0, -4, 0, 0], [2.5, -5, 0, 0], [5, -4, 0, 0]],
+  }),
   idle_look: C('idle_look', 3.4, false, {
     head: [[0, 0, 0, 0], [0.7, 0, 32, 0], [1.4, 0, 32, 0], [2.3, 0, -28, 0], [2.9, 0, -28, 0], [3.4, 0, 0, 0]],
     spine: [[0, 0, 0, 0], [0.7, 0, 8, 0], [1.4, 0, 8, 0], [2.3, 0, -7, 0], [2.9, 0, -7, 0], [3.4, 0, 0, 0]],
@@ -91,7 +133,31 @@ export const INTENTS = {
   bow: { clips: ['bow'] },
   talk: { clips: ['talk'] },
   look: { clips: ['idle_look'] },
+  listen: { clips: ['listen'] },
+  adhan: { clips: ['adhan'] },
+  // Postures change the base pose (the engine blends to it smoothly).
+  sit: { base: 'sit_idle' },
+  lie: { base: 'lie_idle' },
+  sleep: { base: 'sleep_idle' },
+  stand: { base: 'idle' },
+  wake: { base: 'idle' },
 };
+
+// Camera framing per posture (scale of the character, vertical shift in world units).
+export const BASE_VIEW = {
+  idle: { scale: 1, y: 0 },
+  sit_idle: { scale: 0.95, y: 0 },
+  lie_idle: { scale: 0.62, y: 0.7 },
+  sleep_idle: { scale: 0.62, y: 0.7 },
+};
+
+// Mouth shape keys (letters / visemes) and blink, matched by name.
+const vow = (a, b) => new RegExp(`(^|[_.\\- ])(${a}|${b})$|viseme_(${a}|${b})`, 'i');
+export const MOUTH = {
+  open: /jawopen|mouthopen|mouth_open/i,
+  aa: vow('aa', 'a'), ih: vow('ih', 'i'), ou: vow('ou', 'u'), ee: vow('ee', 'e'), oh: vow('oh', 'o'),
+};
+export const BLINK = /blink|eyeclose|eyesclosed|eyes_closed/i;
 
 // Face morph targets are matched by name (only if the GLB has them).
 export const EXPRESSIONS = {

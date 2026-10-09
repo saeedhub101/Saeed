@@ -1,19 +1,33 @@
 // Canonical bone ids used by the motion engine, and auto-detection of
 // bone names from common rigs (Mixamo, VRM, Rigify, Unreal, Biped...).
 
-export const BONES = [
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+export const FINGERS = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
+
+const BODY = [
   ['hips', 'Hips'], ['spine', 'Spine'], ['chest', 'Chest'], ['neck', 'Neck'], ['head', 'Head'],
   ['leftShoulder', 'Left shoulder'], ['leftUpperArm', 'Left upper arm'], ['leftLowerArm', 'Left forearm'], ['leftHand', 'Left hand'],
   ['rightShoulder', 'Right shoulder'], ['rightUpperArm', 'Right upper arm'], ['rightLowerArm', 'Right forearm'], ['rightHand', 'Right hand'],
   ['leftUpperLeg', 'Left thigh'], ['leftLowerLeg', 'Left shin'], ['leftFoot', 'Left foot'],
   ['rightUpperLeg', 'Right thigh'], ['rightLowerLeg', 'Right shin'], ['rightFoot', 'Right foot'],
-].map(([id, label]) => ({ id, label }));
+].map(([id, label]) => ({ id, label, group: 'body' }));
+const FACE = [['leftEye', 'Left eye'], ['rightEye', 'Right eye'], ['jaw', 'Jaw']].map(([id, label]) => ({ id, label, group: 'face' }));
+const fingers = (side) => FINGERS.flatMap((f) => [1, 2, 3, 4].map((i) => ({
+  id: `${side}${f}${i}`, label: `${cap(side)} ${f.toLowerCase()} ${i}`, group: side + 'Fingers',
+})));
+
+export const BONES = [...BODY, ...FACE, ...fingers('left'), ...fingers('right')];
+export const GROUPS = [
+  ['body', 'Body'], ['face', 'Face (eyes, jaw)'], ['leftFingers', 'Left hand fingers'], ['rightFingers', 'Right hand fingers'],
+];
+export const groupOf = (id) => BONES.find((b) => b.id === id)?.group || 'body';
 
 const JUNK = ['mixamorig', 'jbip', 'bip01', 'bip', 'armature', 'def', 'org', 'mch', 'cc'];
 const PARTS = {
   hips: /^(hips?|pelvis)$/,
   neck: /^neck\d*$/,
   head: /^head$/,
+  jaw: /^(jaw|chin)$/,
   shoulder: /^(shoulder|clavicle|collar)\d*$/,
   upperarm: /^(upperarm|arm)\d*$/,
   lowerarm: /^(forearm|lowerarm)\d*$/,
@@ -21,9 +35,11 @@ const PARTS = {
   upperleg: /^(upleg|upperleg|thigh)\d*$/,
   lowerleg: /^(leg|lowerleg|calf|shin)\d*$/,
   foot: /^(foot|ankle)$/,
+  eye: /^(eye|eyeball)$/,
 };
-const SIDED = { shoulder: 'Shoulder', upperarm: 'UpperArm', lowerarm: 'LowerArm', hand: 'Hand', upperleg: 'UpperLeg', lowerleg: 'LowerLeg', foot: 'Foot' };
+const SIDED = { shoulder: 'Shoulder', upperarm: 'UpperArm', lowerarm: 'LowerArm', hand: 'Hand', upperleg: 'UpperLeg', lowerleg: 'LowerLeg', foot: 'Foot', eye: 'Eye' };
 const SPINE = /^(spine|chest|upperchest|abdomen)\d*$/;
+const FINGER = /^(?:hand|f)?(thumb|index|middle|ring|pinky|pink|little)0?([1-4])$/;
 
 function parse(name) {
   let n = name.toLowerCase().replace(/^.*[:|]/, '');
@@ -50,6 +66,15 @@ export function autoMap(bones) {
   for (const b of sorted) {
     const { side, part } = parse(b.name);
     if (!side && SPINE.test(part)) { spines.push(b); continue; }
+    const fm = FINGER.exec(part);
+    if (fm) {
+      if (side) {
+        const f = fm[1] === 'little' || fm[1] === 'pink' ? 'Pinky' : cap(fm[1]);
+        const id = `${side}${f}${fm[2]}`;
+        if (!map[id]) map[id] = b.name;
+      }
+      continue;
+    }
     for (const [key, re] of Object.entries(PARTS)) {
       if (!re.test(part)) continue;
       let id = null;

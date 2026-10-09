@@ -1,0 +1,18 @@
+{
+  "id": "excel", "name": "Excel", "version": "1.0.0", "author": "Saeed",
+  "description": "Read, create and edit .xlsx workbooks: sheets, cell ranges, formulas, new rows.",
+  "main": "index.js", "permissions": ["files:read", "files:write"], "idleSeconds": 60,
+  "tools": [
+    { "name": "list_sheets", "risk": "read", "description": "List the sheets of an .xlsx file with their size.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] } },
+    { "name": "read", "risk": "read", "description": "Read cells from a sheet as rows. Optional range like A1:F40. Formulas return their last result.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "sheet": { "type": "string" }, "range": { "type": "string" }, "maxRows": { "type": "number" } }, "required": ["path"] } },
+    { "name": "write_cells", "risk": "write", "description": "Write values or formulas into cells. Creates the file or sheet if missing. cells: [{ref:'B2', value:12} or {ref:'C2', formula:'B2*2'}]",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "sheet": { "type": "string" }, "cells": { "type": "array", "items": { "type": "object", "properties": { "ref": { "type": "string" }, "value": {}, "formula": { "type": "string" } }, "required": ["ref"] } } }, "required": ["path", "cells"] } },
+    { "name": "append_rows", "risk": "write", "description": "Add rows at the bottom of a sheet. rows is a list of lists.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "sheet": { "type": "string" }, "rows": { "type": "array", "items": { "type": "array", "items": {} } } }, "required": ["path", "rows"] } },
+    { "name": "create", "risk": "write", "description": "Create a new workbook. sheets: [{name, rows:[[...]]}] (first row is usually the header).",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "sheets": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "rows": { "type": "array", "items": { "type": "array", "items": {} } } }, "required": ["name"] } } }, "required": ["path", "sheets"] } }
+  ],
+  "buildDependencies": { "exceljs": "^4.4.0" }
+}

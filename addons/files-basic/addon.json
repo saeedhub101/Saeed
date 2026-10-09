@@ -1,0 +1,15 @@
+{
+  "id": "files-basic", "name": "Files", "version": "1.0.0", "author": "Saeed",
+  "description": "List folders, read and write text files, find files (inside the folders you allow).",
+  "main": "index.js", "permissions": ["files:read", "files:write"], "idleSeconds": 60,
+  "tools": [
+    { "name": "list_folder", "risk": "read", "description": "List the files and folders inside a folder.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] } },
+    { "name": "read_text", "risk": "read", "description": "Read a text, CSV or JSON file.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "maxChars": { "type": "number" } }, "required": ["path"] } },
+    { "name": "write_text", "risk": "write", "description": "Create or overwrite a text file (or append to it).",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" }, "append": { "type": "boolean" } }, "required": ["path", "content"] } },
+    { "name": "find_files", "risk": "read", "description": "Find files by part of their name inside a folder (searches sub-folders).",
+      "schema": { "type": "object", "properties": { "folder": { "type": "string" }, "contains": { "type": "string" }, "maxResults": { "type": "number" } }, "required": ["folder", "contains"] } }
+  ]
+}

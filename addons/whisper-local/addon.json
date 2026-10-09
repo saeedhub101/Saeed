@@ -1,0 +1,10 @@
+{
+  "id": "whisper-local", "name": "Whisper (local speech recognition)", "version": "1.0.0", "author": "Saeed",
+  "description": "Understands your speech on this PC, without internet after the first model download. Starts when you speak and stops when idle.",
+  "main": "index.js", "permissions": [], "idleSeconds": 120,
+  "provides": { "stt": { "label": "Whisper (local)" } },
+  "settings": [
+    { "key": "model", "label": "Model", "type": "select", "default": "Xenova/whisper-base",
+      "options": [["Xenova/whisper-tiny", "Tiny — fastest"], ["Xenova/whisper-base", "Base — balanced"], ["Xenova/whisper-small", "Small — most accurate, slower"]] }
+  ]
+}
