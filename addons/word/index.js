@@ -6,12 +6,12 @@ module.exports = {
   tools: {
     async read({ path: p, maxChars = 20000 }, ctx) {
       const mammoth = require('mammoth');
-      const { value } = await mammoth.extractRawText({ path: ctx.safePath(p) });
+      const { value } = await mammoth.extractRawText({ path: await ctx.access(p, 'read') });
       return value.length > maxChars ? value.slice(0, maxChars) + `\n…(${value.length - maxChars} more characters)` : value;
     },
     async create({ path: p, blocks, rtl }, ctx) {
       const d = require('docx');
-      const full = ctx.safePath(p);
+      const full = await ctx.access(p, 'write', 'Create a new Word document');
       if (fs.existsSync(full)) throw new Error('The file already exists. Choose another name.');
       const H = [d.HeadingLevel.HEADING_1, d.HeadingLevel.HEADING_2, d.HeadingLevel.HEADING_3];
       const para = (text, extra = {}) => new d.Paragraph({ children: [new d.TextRun({ text: String(text), rightToLeft: !!rtl })], bidirectional: !!rtl, ...extra });

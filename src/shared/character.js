@@ -7,6 +7,7 @@ import { autoMap } from './schema.js';
 import { builtinClips, sampleClip, INTENTS, EXPRESSIONS, BASE_VIEW, MOUTH, BLINK } from './clips.js';
 import { buildRig } from './rigbuilder.js';
 import { buildParts } from './accessories.js';
+import { FaceRig } from './face.js';
 
 export const TALL = 1.7; // every character is scaled to this height (world units)
 const D2R = Math.PI / 180, R2D = 180 / Math.PI;
@@ -52,11 +53,11 @@ export class Character {
     this.helper = null;
     this.baseScale = 1; this.view = { scale: 1, y: 0 }; this.viewT = { scale: 1, y: 0 };
     this.prevBase = null; this.prevBaseT = 0; this.blend = 1;
-    this.mouth = { open: 0, aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 }; this.mouthT = { ...this.mouth }; this.mouthWas = false;
-    this.faceIdx = {};
+    this.face = new FaceRig();
+    this.mixer = null; this.glbAnims = {}; this.glbCfg = {}; this.glbActive = new Set(); this.glbHeld = new Set(); this.glbCache = {}; this.glbAsIntent = {}; this.glbTogether = {};
     this.acc = new Map(); this.restWorldQ = new Map(); this.accChain = Promise.resolve();
-    this.eye = { x: 0, y: 0, tx: 0, ty: 0, timer: 1 };
-    this.blinkT = 0; this.blinkNext = 3; this.eyesClosed = false;
+    this.hiddenByOutfit = {}; this.cfgHidden = new Set(); this.baseMeshes = [];
+    this.eyesClosed = false;
     this.hasSkeleton = false; this.rigBuilt = false;
   }
 
@@ -86,19 +87,14 @@ export class Character {
 
     model.traverse((o) => {
       if (o.isBone) { this.allBones.push(o); this.bindQ.set(o, o.quaternion.clone()); this.bindP.set(o, o.position.clone()); }
+      if (o.isMesh) this.baseMeshes.push(o);
       if (o.morphTargetDictionary && o.morphTargetInfluences) this.morphs.push(o);
     });
-    this.indexMorphs();
+    this.face.attach(this.morphs);
+    this.glbAnims = {};
+    for (const c of gltf.animations || []) this.glbAnims[c.name || `clip${Object.keys(this.glbAnims).length + 1}`] = c;
+    this.mixer = Object.keys(this.glbAnims).length ? new THREE.AnimationMixer(model) : null;
     this.applyConfig(cfg);
-  }
-
-  indexMorphs() {
-    this.faceIdx = {};
-    const add = (key, mesh, i) => (this.faceIdx[key] ||= []).push([mesh, i]);
-    for (const m of this.morphs) for (const [name, i] of Object.entries(m.morphTargetDictionary)) {
-      for (const k of Object.keys(MOUTH)) if (MOUTH[k].test(name)) add(k, m, i);
-      if (BLINK.test(name)) add('blink', m, i);
-    }
   }
 
   unload() {
@@ -112,20 +108,32 @@ export class Character {
         for (const m of mats) { for (const k in m) if (m[k] && m[k].isTexture) m[k].dispose(); m.dispose(); }
       });
     }
+    if (this.mixer && this.model) { this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.model); }
+    this.mixer = null; this.glbAnims = {}; this.glbActive.clear(); this.glbHeld.clear(); this.glbCache = {};
+    this.face.attach([]);
     this.model = null; this.box = null; this.allBones = []; this.map = {}; this.order = [];
     this.bindQ.clear(); this.bindP.clear(); this.restQ.clear();
     this.morphs = []; this.expr = {}; this.actions = [];
-    this.hasSkeleton = false; this.rigBuilt = false;
+    this.hasSkeleton = false; this.rigBuilt = false; this.baseMeshes = []; this.hiddenByOutfit = {};
     this.pivot.scale.setScalar(1);
     this.baseScale = 1; this.view = { scale: 1, y: 0 }; this.viewT = { scale: 1, y: 0 }; this.pivot.position.y = 0;
-    this.base = 'idle'; this.prevBase = null; this.blend = 1; this.faceIdx = {}; this.eyesClosed = false;
+    this.base = 'idle'; this.prevBase = null; this.blend = 1; this.eyesClosed = false;
   }
 
   applyConfig(cfg) {
     this.cfg = cfg;
     if (!this.model) return;
     this.pivot.rotation.y = (cfg.modelYaw || 0) * D2R;
+    this.cfgHidden = new Set(cfg.hiddenMeshes || []);
+    this.applyHidden();
     this.clips = { ...builtinClips(), ...(cfg.clips || {}) };
+    this.face.setConfig(cfg.face);
+    this.glbCfg = cfg.glbClips || {}; this.glbCache = {}; this.glbAsIntent = {}; this.glbTogether = {};
+    for (const [n, g] of Object.entries(this.glbCfg)) {
+      if (!g.enabled || !this.glbAnims[n]) continue;
+      for (const i of g.asIntent || []) (this.glbAsIntent[i] = this.glbAsIntent[i] || []).push(n);
+      for (const i of g.together || []) (this.glbTogether[i] = this.glbTogether[i] || []).push(n);
+    }
     const names = Object.keys(cfg.boneMap || {}).length ? cfg.boneMap : autoMap(this.allBones);
     const byName = new Map();
     for (const b of this.allBones) if (!byName.has(b.name)) byName.set(b.name, b);
@@ -214,18 +222,18 @@ export class Character {
 
   updateCore(dt) {
     if (!this.model) return;
-    this.updateExpr(dt);
-    this.updateFace(dt);
     this.updateView(dt);
-    if (this.mode === 'rest') return;
+    this.face.reset();                              // shape keys back to the model's values
     if (this.mode === 'preview') {
       const p = this.preview;
       if (p && p.clip) { const f = sampleClip(p.clip, p.t, p.ovr); this.finalize(f, false); this.pose(f); }
-      return;
+    } else if (this.mode === 'engine') {
+      const f = this.engineFrame(dt);
+      this.finalize(f, true);
+      this.pose(f);
     }
-    const f = this.engineFrame(dt);
-    this.finalize(f, true);
-    this.pose(f);
+    if (this.mixer && this.glbActive.size) this.tickGlb(dt);   // animations from the GLB file
+    this.face.update(dt);                           // speech, blinking, eyes, brows, expressions on top
   }
 
   engineFrame(dt) {
@@ -272,40 +280,46 @@ export class Character {
   command(name, args = {}) {
     if (!this.model) return null;
     const intent = { ...INTENTS, ...(this.cfg.intents || {}) }[name];
-    let clipName = null;
     if (intent && intent.base) this.setBase(intent.base);
+    let clipName = null, glbName = null;
     if (intent) {
-      const opts = (intent.clips || []).filter((c) => this.clips[c]);
+      const own = (intent.clips || []).filter((c) => this.clips[c]);
+      const glb = this.glbAsIntent[name] || [];
+      const opts = [...own, ...glb];
       const fresh = opts.filter((c) => c !== this.lastClip);
       const pool = fresh.length ? fresh : opts;
-      clipName = pool[Math.floor(Math.random() * pool.length)] || null;
+      const pick = pool[Math.floor(Math.random() * pool.length)] || null;
+      if (pick && glb.includes(pick) && !own.includes(pick)) glbName = pick; else clipName = pick;
     } else if (this.clips[name]) clipName = name;
-    if (!clipName) return intent && intent.base ? intent.base : null;
+    else if (this.face.has(name)) { this.face.expression(name, 1, args.duration ?? 2.5); return name; }
+    else if (this.glbAnims[name] && (this.glbCfg[name] || {}).enabled) { this.playGlb(name, { hold: !!args.hold }); return name; }
+    if (intent && intent.expr) {
+      const ex = Array.isArray(intent.expr) ? intent.expr[Math.floor(Math.random() * intent.expr.length)] : intent.expr;
+      this.face.expression(ex, 1, intent.hold ?? 2.5);
+    }
+    for (const g of this.glbTogether[name] || []) this.playGlb(g);
+    if (glbName) { this.lastClip = glbName; this.playGlb(glbName, { hold: !!args.hold }); this.idleTimer = rand(8, 16); return glbName; }
+    if (!clipName) return intent && (intent.base || intent.expr || (this.glbTogether[name] || []).length) ? name : null;
     this.lastClip = clipName;
     for (const a of this.actions) if (!a.closing) { a.closing = true; a.closeT = 0; }
     const clip = this.clips[clipName];
     this.actions.push({ name: clipName, t: 0, closing: false, closeT: 0, until: args.hold ? Infinity : clip.loop ? (args.duration ?? 2) : undefined });
-    if (intent && intent.expr) this.setExpression(intent.expr, 1, clip.duration);
     this.idleTimer = rand(8, 16);
     return clipName;
   }
 
-  stopActions() { for (const a of this.actions) if (!a.closing) { a.closing = true; a.closeT = 0; } }
+  stopActions() { this.stopGlb(); for (const a of this.actions) if (!a.closing) { a.closing = true; a.closeT = 0; } }
 
   setBase(name) {
     if (name === this.base || !this.clips[name]) return;
     this.prevBase = this.base; this.prevBaseT = this.baseT;
     this.base = name; this.baseT = 0; this.blend = 0;
     this.viewT = { ...(BASE_VIEW[name] || BASE_VIEW.idle) };
-    this.eyesClosed = name === 'sleep_idle';
+    this.eyesClosed = this.face.sleeping = name === 'sleep_idle';
   }
 
-  /** m = { open: 0..1, vowel?: 'aa'|'ih'|'ou'|'ee'|'oh' } — drives the jaw bone and the mouth shape keys. */
-  setMouth(m) {
-    for (const k of Object.keys(this.mouthT)) this.mouthT[k] = 0;
-    this.mouthT.open = m.open || 0;
-    if (m.vowel && m.vowel in this.mouthT) this.mouthT[m.vowel] = m.open || 0;
-  }
+  /** m = { open: 0..1, vowel?: 'aa'|'ih'|'ou'|'ee'|'oh' }: loudness-based mouth movement used when no text is known. */
+  setMouth(m) { this.face.setLive(m); }
 
   updateView(dt) {
     const t = this.mode === 'engine' ? this.viewT : BASE_VIEW.idle;
@@ -316,37 +330,18 @@ export class Character {
     this.pivot.position.y = this.view.y;
   }
 
-  updateFace(dt) {
-    const k = Math.min(1, dt * 20);
-    for (const key of Object.keys(this.mouth)) this.mouth[key] += (this.mouthT[key] - this.mouth[key]) * k;
-    const active = Object.values(this.mouth).some((v) => v > 0.002);
-    if (active || this.mouthWas) {
-      for (const key of Object.keys(this.mouth)) for (const [m, i] of this.faceIdx[key] || []) m.morphTargetInfluences[i] = Math.min(1, this.mouth[key]);
-    }
-    this.mouthWas = active;
-    this.blinkNext -= dt;
-    if (this.blinkNext <= 0) { this.blinkT = 0.16; this.blinkNext = rand(2.5, 6); }
-    let blink = this.eyesClosed ? 1 : 0;
-    if (this.blinkT > 0) { this.blinkT -= dt; blink = Math.max(blink, Math.sin((Math.max(0, this.blinkT) / 0.16) * Math.PI)); }
-    for (const [m, i] of this.faceIdx.blink || []) m.morphTargetInfluences[i] = blink;
-    this.eye.timer -= dt;
-    if (this.eye.timer <= 0) { this.eye.tx = rand(-4, 4); this.eye.ty = rand(-6, 6); this.eye.timer = rand(1.2, 4); }
-    const e = Math.min(1, dt * 10);
-    this.eye.x += (this.eye.tx - this.eye.x) * e; this.eye.y += (this.eye.ty - this.eye.y) * e;
-  }
-
   // Adds the jaw (from the mouth level) and small eye movements on top of the clip frame.
   finalize(frame, engine) {
-    const open = this.mouth.open;
+    const f = this.face, open = f.open * f.opts.jawBone;
     if (open > 0.002 && this.map.jaw) {
       const j = frame.get('jaw');
       frame.set('jaw', { r: [(j ? j.r[0] : 0) + open * 22, j ? j.r[1] : 0, j ? j.r[2] : 0], p: null });
     }
-    if (engine && !this.eyesClosed) {
+    if (engine && !f.sleeping && f.opts.eyes) {
       for (const id of ['leftEye', 'rightEye']) {
         if (!this.map[id]) continue;
         const e = frame.get(id);
-        frame.set(id, { r: [(e ? e.r[0] : 0) + this.eye.x, (e ? e.r[1] : 0) + this.eye.y, 0], p: null });
+        frame.set(id, { r: [(e ? e.r[0] : 0) - f.eye.y * 5, (e ? e.r[1] : 0) + f.eye.x * 8, 0], p: null });
       }
     }
   }
@@ -363,6 +358,16 @@ export class Character {
       const st = state[d.id];
       if (!st || !st.on) continue;
       want.add(d.id);
+      if (d.type === 'outfit') {                 // clothes that share the character's skeleton
+        if (!this.acc.get(d.id)) {
+          const o = { outfit: true, meshes: [] };
+          this.acc.set(d.id, o);
+          try { o.meshes = await this._addOutfit(d, loadFile); } catch (e) { console.error(e); }
+          this.hiddenByOutfit[d.id] = d.hide || [];
+          this.applyHidden();
+        }
+        continue;
+      }
       let a = this.acc.get(d.id);
       if (!a) {
         const holder = new THREE.Group(), inner = new THREE.Group();
@@ -385,7 +390,49 @@ export class Character {
     }
     for (const [id, a] of [...this.acc]) if (!want.has(id)) this.dropAccessory(id, a);
   }
+  // The outfit file must be made for the same skeleton (same bone names / same rest pose), for example exported from the same Blender file.
+  async _addOutfit(d, loadFile) {
+    const buf = await_buf(await loadFile(d));
+    const gltf = await new Promise((res, rej) => new GLTFLoader().parse(buf, '', res, rej));
+    gltf.scene.updateMatrixWorld(true);
+    const byName = new Map();
+    for (const b of this.allBones) if (!byName.has(b.name)) byName.set(b.name, b);
+    const out = [];
+    gltf.scene.traverse((o) => {
+      if (!o.isSkinnedMesh || !this.model) return;
+      const src = o.skeleton;
+      const canon = {};
+      for (const [id, name] of Object.entries(autoMap(src.bones))) canon[name] = id;
+      const pick = (ob) => byName.get(ob.name) || (canon[ob.name] && this.map[canon[ob.name]]) || null;
+      const bones = src.bones.map((ob) => {
+        let b = pick(ob);
+        for (let p = ob.parent; !b && p; p = p.parent) b = pick(p);
+        return b || this.map.hips || this.allBones[0];
+      });
+      const sm = new THREE.SkinnedMesh(o.geometry, o.material);
+      sm.name = o.name; sm.frustumCulled = false;
+      o.matrixWorld.decompose(sm.position, sm.quaternion, sm.scale);
+      this.model.add(sm);
+      sm.updateMatrixWorld(true);
+      sm.bind(new THREE.Skeleton(bones, src.boneInverses.map((m) => m.clone())), o.bindMatrix.clone());
+      out.push(sm);
+    });
+    return out;
+  }
+
+  // Meshes hidden by the user (Studio -> Accessories) or replaced by an outfit.
+  applyHidden() {
+    const hide = new Set(this.cfgHidden);
+    for (const list of Object.values(this.hiddenByOutfit)) for (const n of list) hide.add(n);
+    for (const m of this.baseMeshes) m.visible = !hide.has(m.name);
+  }
+
   dropAccessory(id, a) {
+    if (a.outfit) {
+      for (const m of a.meshes) { if (this.model) this.model.remove(m); m.geometry.dispose(); [].concat(m.material).forEach((x) => x.dispose()); }
+      delete this.hiddenByOutfit[id]; this.acc.delete(id); this.applyHidden();
+      return;
+    }
     this.scene.remove(a.holder);
     a.holder.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => m.dispose()); });
     this.acc.delete(id);
@@ -396,6 +443,7 @@ export class Character {
   syncAccessories() {
     if (!this.acc.size) return;
     for (const a of this.acc.values()) {
+      if (a.outfit) continue;
       const b = this.map[a.bone];
       if (!b || !this.model) { a.holder.visible = false; continue; }
       a.holder.visible = true;
@@ -408,22 +456,74 @@ export class Character {
     }
   }
 
-  /* ---------- expressions (morph targets, only if the GLB has them) ---------- */
-  setExpression(name, value = 1, hold = 2) {
-    const s = this.expr[name] || (this.expr[name] = { cur: 0, target: 0, hold: 0 });
-    s.target = value; s.hold = hold;
-  }
-  updateExpr(dt) {
-    for (const [name, s] of Object.entries(this.expr)) {
-      if (s.hold > 0) { s.hold -= dt; if (s.hold <= 0) s.target = 0; }
-      s.cur += (s.target - s.cur) * Math.min(1, dt * 6);
-      const re = EXPRESSIONS[name];
-      if (!re) continue;
-      for (const m of this.morphs) for (const [key, i] of Object.entries(m.morphTargetDictionary)) if (re.test(key)) m.morphTargetInfluences[i] = s.cur;
+  setExpression(name, value = 1, hold = 2) { this.face.expression(name, value, hold); }
+
+  /* ---------- animations that come inside the GLB file ---------- */
+  // target: 'morphs' keeps only the face (shape key) tracks, 'bones' only the body tracks, 'all' everything.
+  glbClipFor(name) {
+    const base = this.glbAnims[name];
+    if (!base) return null;
+    const target = (this.glbCfg[name] || {}).target || 'morphs';
+    const key = `${name}|${target}`;
+    if (!this.glbCache[key]) {
+      const isMorph = (t) => /morphTargetInfluences/.test(t.name);
+      const tracks = base.tracks.filter((t) => target === 'all' || (target === 'morphs' ? isMorph(t) : !isMorph(t)));
+      this.glbCache[key] = new THREE.AnimationClip(name, base.duration, tracks);
     }
+    return this.glbCache[key];
+  }
+  playGlb(name, { hold = false } = {}) {
+    if (!this.mixer) return false;
+    const clip = this.glbClipFor(name);
+    if (!clip || !clip.tracks.length) return false;
+    const cfg = this.glbCfg[name] || {};
+    const act = this.mixer.clipAction(clip);
+    const loop = hold || !!cfg.loop;
+    act.reset(); act._fading = false;
+    act.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+    act.clampWhenFinished = true; act.timeScale = cfg.speed || 1; act.enabled = true;
+    act.fadeIn(0.2).play();
+    this.glbActive.add(act);
+    if (hold) this.glbHeld.add(act);
+    if (!loop) {
+      const done = (e) => { if (e.action !== act) return; this.mixer.removeEventListener('finished', done); act.fadeOut(0.3); act._fading = true; };
+      this.mixer.addEventListener('finished', done);
+    }
+    return true;
+  }
+  stopGlb(all = false) {
+    for (const a of this.glbHeld) { a.fadeOut(0.25); a._fading = true; }
+    this.glbHeld.clear();
+    if (all) for (const a of this.glbActive) { a.fadeOut(0.25); a._fading = true; }
+  }
+  tickGlb(dt) {
+    this.mixer.update(dt);
+    for (const a of [...this.glbActive]) if (a._fading && a.getEffectiveWeight() < 0.001) { a.stop(); this.glbActive.delete(a); }
+  }
+  /** The shape-key values of a GLB clip at time t (default: the moment with the most movement). Used to make poses from animations. */
+  glbMorphPose(name, t) {
+    const base = this.glbAnims[name];
+    if (!base) return [];
+    const tracks = base.tracks.filter((x) => /morphTargetInfluences/.test(x.name));
+    if (!tracks.length) return [];
+    const mesh = (tr) => this.morphs.find((m) => tr.name.startsWith(m.name + '.'));
+    const sample = (tt) => {
+      const acc = new Map();
+      for (const tr of tracks) {
+        const m = mesh(tr);
+        if (!m) continue;
+        const n = Object.keys(m.morphTargetDictionary).length, vals = tr.createInterpolant().evaluate(tt);
+        for (const [name2, i] of Object.entries(m.morphTargetDictionary)) acc.set(name2, Math.max(acc.get(name2) || 0, Math.abs(vals[i] ?? 0)));
+        void n;
+      }
+      return acc;
+    };
+    let best = t, bestSum = -1;
+    if (t == null) for (let k = 0; k <= 40; k++) { const tt = (base.duration * k) / 40; let s = 0; for (const v of sample(tt).values()) s += v; if (s > bestSum) { bestSum = s; best = tt; } }
+    return [...sample(best).entries()].filter(([, v]) => v > 0.02).map(([n, w]) => ({ n, w: +Math.min(1, w).toFixed(2) }));
   }
 
-  /* ---------- helpers for the studio ---------- */
+  /* ---------- helpers for the studio */
   showSkeleton(on) {
     if (this.helper) { this.scene.remove(this.helper); this.helper.dispose?.(); this.helper = null; }
     if (on && this.model && this.allBones.length) {

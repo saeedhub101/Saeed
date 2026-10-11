@@ -134,6 +134,16 @@ export const INTENTS = {
   talk: { clips: ['talk'] },
   look: { clips: ['idle_look'] },
   listen: { clips: ['listen'] },
+  // Face-only intents: they use the expressions mapped in Studio → Face.
+  wink: { expr: ['winkL', 'winkR'], hold: 0.45 },
+  smile: { expr: 'smile', hold: 3 },
+  surprised: { expr: 'surprised', hold: 2.2 },
+  angry: { expr: 'angry', hold: 2.5 },
+  worried: { expr: 'worried', hold: 2.5 },
+  laugh: { expr: 'laugh', hold: 2.5 },
+  tongue: { expr: 'tongueOut', hold: 1.4 },
+  kiss: { expr: 'kiss', hold: 1.2 },
+  brows: { expr: 'browUp', hold: 1.2 },
   adhan: { clips: ['adhan'] },
   // Postures change the base pose (the engine blends to it smoothly).
   sit: { base: 'sit_idle' },

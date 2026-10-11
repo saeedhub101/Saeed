@@ -6,8 +6,9 @@ const { app } = require('electron');
 const llm = require('./llm');
 const actions = require('./actions');
 const addons = require('./addons');
+const { dialog } = require('electron');
 
-const INTENTS = ['happy', 'sad', 'think', 'yes', 'no', 'greet', 'bow', 'sit', 'lie', 'sleep', 'stand'];
+const INTENTS = ['happy', 'sad', 'think', 'yes', 'no', 'greet', 'bow', 'sit', 'lie', 'sleep', 'stand', 'wink', 'smile', 'surprised', 'angry', 'worried', 'laugh', 'tongue', 'kiss'];
 const DEFAULT_PROMPT = [
   'You are Saeed, a friendly desktop assistant shown as a 3D character on the user\'s PC, and a capable agent.',
   'Reply in the same language the user writes or speaks (Arabic or English).',
@@ -15,6 +16,8 @@ const DEFAULT_PROMPT = [
   'Use the express tool to show an emotion or posture when it fits (do not overuse it).',
   'Use open_item to open apps, folders or files, and get_time for the time.',
   'Use the other tools (files, Excel, Word, PDF, OCR...) when they are available and the task needs them: read before you change anything, never invent data, and report what you did in one or two sentences.',
+  'To work inside another program, use the screen tools: take a screenshot first, act in small steps, look at the result after each step, never guess what a button does, and stop and tell the user if something unexpected appears.',
+  'Before an irreversible step in any system (submit, issue, send, pay, delete, overwrite) call confirm_with_user with a clear question.',
   'If you cannot do something, say so briefly and say which add-on would be needed.',
 ].join(' ');
 
@@ -24,6 +27,8 @@ const CORE_TOOLS = [
   { name: 'open_item', description: 'Open an app, folder or file for the user: Excel, Word, PowerPoint, Notepad, Calculator, My Computer, Downloads, Documents, or an item from the user\'s quick launch list.',
     schema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
   { name: 'get_time', description: 'Get the current local date and time.', schema: { type: 'object', properties: {} } },
+  { name: 'confirm_with_user', description: 'Ask the user a yes/no question in a window and wait for the answer. Use it before irreversible steps.',
+    schema: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] } },
 ];
 const toolDefs = () => [...CORE_TOOLS, ...addons.toolDefs()];
 
@@ -32,6 +37,10 @@ async function execTool(settings, name, args, { onIntent, onTool, signal } = {})
   if (name === 'express') { if (INTENTS.includes(args.intent) && onIntent) onIntent(args.intent); return 'ok'; }
   if (name === 'open_item') return actions.openItem(args.name, settings);
   if (name === 'get_time') return new Date().toString();
+  if (name === 'confirm_with_user') {
+    const r = await dialog.showMessageBox({ type: 'question', title: 'Saeed asks you', message: String(args.question || 'Continue?'), buttons: ['Yes, go ahead', 'No'], defaultId: 1, cancelId: 1, noLink: true });
+    return r.response === 0 ? 'The user said yes.' : 'The user said no. Do not continue with this step.';
+  }
   return addons.invokeTool(name, args, signal);
 }
 
@@ -47,17 +56,24 @@ function save() {
   timer = setTimeout(() => fs.writeFile(file(), JSON.stringify(load().slice(-200)), () => {}), 500);
 }
 
-async function ask(text, { signal, onIntent, onTool, settings, images = [] }) {
+// Company procedures whose keywords appear in the request are added to the instructions.
+function procedureText(settings, text) {
+  const t = actions.norm(text);
+  const hits = (settings.procedures || []).filter((p) => p.text && String(p.keywords || '').split(',').map((k) => actions.norm(k)).filter(Boolean).some((k) => t.includes(k)));
+  return hits.length ? '\n\nProcedures of this company, follow them when they apply:\n' + hits.map((p) => `## ${p.name}\n${p.text}`).join('\n\n').slice(0, 6000) : '';
+}
+
+async function ask(text, { signal, onIntent, onTool, onText, settings, images = [] }) {
   const h = load();
   const mine = { role: 'user', text: images.length ? `${text} [image attached]` : text, t: Date.now() };
   h.push(mine); save();
   const recent = h.slice(-(settings.llm.maxTurns || 12) * 2).map((m) => ({ ...m }));
   while (recent.length && recent[0].role !== 'user') recent.shift();
   if (images.length && recent.length) { const last = recent[recent.length - 1]; last.text = text; last.images = images; }
-  const system = (settings.llm.systemPrompt || DEFAULT_PROMPT) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
+  const system = (settings.llm.systemPrompt || DEFAULT_PROMPT) + procedureText(settings, text) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
   try {
     const reply = await llm.runAgent(settings, {
-      system, history: recent, tools: toolDefs(), signal,
+      system, history: recent, tools: toolDefs(), signal, onText,
       execTool: (name, args) => execTool(settings, name, args, { onIntent, onTool, signal }),
     });
     h.push({ role: 'assistant', text: reply, t: Date.now() }); save();

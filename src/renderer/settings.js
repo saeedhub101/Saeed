@@ -236,15 +236,23 @@ function realtimeSection() {
 
 function agentSection() {
   const g = S.agent;
-  return section('Agent and safety',
-    row('Ask before acting', SEL(g, 'confirm', [['writes', 'Before actions that change things (recommended)'], ['always', 'Before every action'], ['never', 'Never ask']])),
-    h('div', { class: 'muted' }, 'Folders Saeed may read and change (empty = Documents, Desktop, Downloads)'),
-    ...g.allowedFolders.map((f, i) => h('div', { class: 'row' }, h('input', { type: 'text', class: 'grow', value: f, onchange: (e) => { g.allowedFolders[i] = e.target.value; save(); } }),
-      h('button', { class: 'x', onclick: () => { g.allowedFolders.splice(i, 1); save(); render(); } }, '×'))),
-    h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: async () => { const f = await api.pickFile('dir'); if (f) { g.allowedFolders.push(f); save(); render(); } } }, 'Add folder…')),
+  return section('Agent, permissions and add-ons',
+    note('What Saeed may read, change, delete or open, and where, is controlled in the Permissions window. Each kind of action can be Ask, Allow or Deny, and every folder can have its own rule, including Windows system folders.'),
+    h('div', { class: 'btns' }, h('button', { class: 'btn primary', onclick: () => api.openWindow('permissions') }, 'Open Permissions'), h('button', { class: 'btn', onclick: () => api.openWindow('addons') }, 'Open Add-ons')),
     row('Stop an idle add-on after (seconds)', bind(g, 'addonIdleSeconds', h('input', { type: 'number', min: 10, max: 3600, value: g.addonIdleSeconds }), Number)),
-    note('Add-ons are programs. Install only add-ons you trust. The first time an add-on wants to change something you are asked, and you can allow it for good.'),
-    h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => api.openWindow('addons') }, 'Open Add-ons')));
+    row('Steps allowed per request', bind(g, 'maxSteps', h('input', { type: 'number', min: 3, max: 100, value: g.maxSteps }), Number)),
+    note('Working inside another program takes many small steps (look, click, check). Raise this for long tasks. Add-ons are programs: install only add-ons you trust.'));
+}
+
+function proceduresSection() {
+  const list = S.procedures;
+  return section('Procedures (how to work in your company systems)',
+    note('Describe a task once: which program, which screens, which fields, in what order, and what to check. When a request contains one of the keywords, Saeed receives this text and follows it. Example: keywords "insurance, policy, بوليصة"; text "Open InsureSys, menu Policies → New, fill Name, Date, Plan, check the premium, then ask me before pressing Issue."'),
+    ...list.map((p, i) => h('div', { class: 'box' },
+      h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Name'), T(p, 'name'), h('button', { class: 'x', title: 'Remove', onclick: () => { list.splice(i, 1); save(); render(); } }, '×')),
+      h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Keywords'), T(p, 'keywords', 'separated by commas')),
+      bind(p, 'text', h('textarea', { rows: 6, value: p.text, dir: 'auto', placeholder: 'Steps…' })))),
+    h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => { list.push({ name: '', keywords: '', text: '' }); render(); } }, 'Add a procedure')));
 }
 
 function updatesSection() {
@@ -277,7 +285,7 @@ function performanceSection() {
 function render() {
   const y = window.scrollY;
   clearInterval(metricsTimer);
-  root.replaceChildren(audioSection(), sttSection(), llmSection(), ttsSection(), realtimeSection(), prayerSection(), launcherSection(), agentSection(), updatesSection(), performanceSection());
+  root.replaceChildren(audioSection(), sttSection(), llmSection(), ttsSection(), realtimeSection(), prayerSection(), launcherSection(), agentSection(), proceduresSection(), updatesSection(), performanceSection());
   window.scrollTo(0, y);
 }
 render();

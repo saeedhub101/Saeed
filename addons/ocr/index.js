@@ -7,7 +7,7 @@ module.exports = {
   tools: {
     async image_to_text({ path: p, lang = 'ara+eng' }, ctx) {
       const { createWorker } = require('tesseract.js');
-      const file = ctx.safePath(p);
+      const file = await ctx.access(p, 'read');
       if (!worker || workerLang !== lang) {
         if (worker) await worker.terminate();
         const local = path.join(ctx.addonDir, 'tessdata');

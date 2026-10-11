@@ -1,0 +1,1 @@
+{ "name": "saeed-addon-charts", "version": "1.0.0", "private": true, "optionalDependencies": { "@resvg/resvg-js": "^2.6.2" } }

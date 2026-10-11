@@ -42,9 +42,25 @@ const DEFAULT_SETTINGS = {
     custom: { url: '', model: '', voice: '', protocol: 'ga', transcribeModel: '', sampleRate: 24000, authHeader: 'Authorization', authPrefix: 'Bearer ', headers: '' },
   },
   agent: {
-    confirm: 'writes',                 // writes | always | never : ask before actions that change things
-    allowedFolders: [],                // empty = Documents, Desktop, Downloads
     addonIdleSeconds: 90,              // an idle add-on is stopped after this long
+    maxSteps: 25,                      // tool steps allowed for one request (screen work needs many)
+  },
+  procedures: [],                      // [{ name, keywords: 'insurance, policy', text }] how to work in your company systems
+  // What Saeed may do (caps) and where (locations). Modes: ask | allow | deny.
+  permissions: {
+    caps: {
+      'files.read': 'allow', 'files.write': 'ask', 'files.delete': 'ask', 'files.deletePermanent': 'deny',
+      'apps.open': 'allow', 'system.run': 'ask', 'desktop.control': 'ask', 'network': 'ask',
+    },
+    defaultLocation: 'ask',            // places that match no rule below
+    locations: [
+      { path: '~/Documents', mode: 'allow' }, { path: '~/Desktop', mode: 'allow' }, { path: '~/Downloads', mode: 'allow' }, { path: '~/Pictures', mode: 'allow' },
+      { path: '%OneDrive%/Documents', mode: 'allow' }, { path: '%OneDrive%/Desktop', mode: 'allow' },
+      { path: '%SystemRoot%', mode: 'deny' }, { path: '%ProgramFiles%', mode: 'deny' }, { path: '%ProgramFiles(x86)%', mode: 'deny' },
+      { path: '%ProgramData%', mode: 'deny' }, { path: '%APPDATA%', mode: 'deny' }, { path: '%LOCALAPPDATA%', mode: 'deny' },
+    ],
+    grants: {},                        // { addonId: { 'files.write': true } } set by "Always allow"
+    dangerous: false,                  // allow deleting drive roots, the Windows folder and the user profile folder
   },
   updates: { repo: '', autoCheck: true },
   addons: { registryUrl: '', enabled: {}, settings: {}, trusted: {} },

@@ -15,8 +15,8 @@ const plain = (v) => {
   }
   return v;
 };
-async function open(p, ctx, mustExist) {
-  const full = ctx.safePath(p);
+async function open(p, ctx, mustExist, mode = 'read') {
+  const full = await ctx.access(p, mode);
   const wb = new ExcelJS.Workbook();
   if (fs.existsSync(full)) await wb.xlsx.readFile(full);
   else if (mustExist) throw new Error('File not found: ' + full);
@@ -33,11 +33,11 @@ async function save(wb, full) { fs.mkdirSync(path.dirname(full), { recursive: tr
 module.exports = {
   tools: {
     async list_sheets({ path: p }, ctx) {
-      const { wb } = await open(p, ctx, true);
+      const { wb } = await open(p, ctx, true, 'read');
       return wb.worksheets.map((w) => ({ name: w.name, rows: w.actualRowCount, columns: w.actualColumnCount }));
     },
     async read({ path: p, sheet, range, maxRows = 200 }, ctx) {
-      const { wb } = await open(p, ctx, true);
+      const { wb } = await open(p, ctx, true, 'read');
       const ws = sheetOf(wb, sheet);
       let r1 = 1, r2 = Math.min(ws.rowCount, maxRows), c1 = 1, c2 = ws.columnCount;
       if (range) {
@@ -55,21 +55,21 @@ module.exports = {
       return { sheet: ws.name, fromRow: r1, rows, totalRows: ws.rowCount };
     },
     async write_cells({ path: p, sheet, cells }, ctx) {
-      const { wb, full } = await open(p, ctx, false);
+      const { wb, full } = await open(p, ctx, false, 'write');
       const ws = sheetOf(wb, sheet, true);
       for (const c of cells) ws.getCell(c.ref).value = c.formula ? { formula: String(c.formula).replace(/^=/, '') } : c.value;
       await save(wb, full);
       return `Wrote ${cells.length} cells in ${ws.name} (${full})`;
     },
     async append_rows({ path: p, sheet, rows }, ctx) {
-      const { wb, full } = await open(p, ctx, false);
+      const { wb, full } = await open(p, ctx, false, 'write');
       const ws = sheetOf(wb, sheet, true);
       for (const r of rows) ws.addRow(r);
       await save(wb, full);
       return `Added ${rows.length} rows to ${ws.name} (${full})`;
     },
     async create({ path: p, sheets }, ctx) {
-      const full = ctx.safePath(p);
+      const full = await ctx.access(p, 'write', 'Create a new workbook');
       if (fs.existsSync(full)) throw new Error('The file already exists. Use write_cells or append_rows to change it.');
       const wb = new ExcelJS.Workbook();
       for (const s of sheets) {

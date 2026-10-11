@@ -4,6 +4,7 @@ const secrets = require('./secrets');
 const addons = require('./addons');
 const { encodeWav } = require('./wav');
 
+const DEFAULT_STT_MODEL = { openai: 'whisper-1', custom: 'whisper-large-v3' };
 const trim = (u) => String(u || '').replace(/\/+$/, '');
 const bearer = (name) => { const k = secrets.get(name); return k ? { Authorization: `Bearer ${k}` } : {}; };
 async function ok(r, label) {
@@ -25,7 +26,9 @@ async function transcribe(s, f32, { signal } = {}) {
     return String((await r.json()).text || '').trim();
   }
   const p = c[c.provider];
-  fd.append('model', p.model);
+  const model = String(p.model || '').trim() || DEFAULT_STT_MODEL[c.provider];
+  if (!model) throw new Error('Speech to text: the model name is empty. Set it in Settings → Speech to text.');
+  fd.append('model', model);
   if (lang) fd.append('language', lang);
   const r = await ok(await fetch(`${trim(p.baseUrl)}/audio/transcriptions`, { method: 'POST', headers: bearer(c.provider), body: fd, signal }), 'STT');
   return String((await r.json()).text || '').trim();
@@ -52,7 +55,7 @@ async function synthesize(s, text, { signal } = {}) {
     const r = await ok(await fetch(`${trim(p.baseUrl)}/audio/speech`, {
       method: 'POST', signal,
       headers: { 'content-type': 'application/json', ...bearer(c.provider) },
-      body: JSON.stringify({ model: p.model, voice: p.voice, input: text, response_format: 'mp3' }),
+      body: JSON.stringify({ model: String(p.model || '').trim() || (c.provider === 'openai' ? 'gpt-4o-mini-tts' : ''), voice: String(p.voice || '').trim() || 'alloy', input: text, response_format: 'mp3' }),
     }), 'TTS');
     return { mime: 'audio/mpeg', bytes: Buffer.from(await r.arrayBuffer()) };
   }

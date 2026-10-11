@@ -103,14 +103,16 @@ const voice = new Voice(() => cfg.settings, {
     }
   },
   onLevel: (rms) => micBtn.style.setProperty('--level', Math.min(1, rms * 6).toFixed(2)),
-  onHearing: (on) => { markActive(); if (on) ch.command('listen', { hold: true }); else ch.stopActions(); },
+  onChunk: (c) => ch.face.speakText(c.text, { duration: c.duration, lead: c.lead, env: c.env, estimated: !!c.estimated }),
+  onBoundary: (ci) => ch.face.seekChar(ci),
+  onHearing: (on) => { markActive(); ch.face.listening = on; if (on) ch.command('listen', { hold: true }); else ch.stopActions(); },
   onUtterance: (f32) => api.sendUtterance(f32),
   onInterrupt: () => { if (voice.live) api.rtInterrupt(); else api.interrupt(); ch.stopActions(); hideBubble(); },
   onSpeaking: (on, kind) => {
     markActive();
     if (on && voice.live) return;
     if (on) { if (kind !== 'adhan') ch.command('talk', { hold: true }); }
-    else { ch.stopActions(); ch.setMouth({ open: 0 }); if (cfg.settings.audio.bubbleAlways) setTimeout(hideBubble, 1500); }
+    else { ch.stopActions(); ch.face.stopSpeech(); ch.setMouth({ open: 0 }); if (cfg.settings.audio.bubbleAlways) setTimeout(hideBubble, 1500); }
   },
   onMouth: (m) => ch.setMouth(m),
   onError: (msg) => showBubble(msg, 5000),
@@ -144,22 +146,23 @@ api.onPipeline(async (ev) => {
   const a = cfg.settings.audio;
   markActive();
   switch (ev.type) {
-    case 'thinking': ch.command('think'); break;
+    case 'thinking': ch.command('think'); ch.face.lookAt(0.6, 0.5, 1.8); break;
     case 'intent': ch.command(ev.name); break;
     case 'speak-start':
       speakInfo = ev; voice.beginStream();
-      if (ev.muted || a.bubbleAlways) showBubble(ev.text, 0);
+      if (ev.text && (ev.muted || a.bubbleAlways)) showBubble(ev.text, 0);
       if (ev.muted) ch.command('talk', { hold: true });
       break;
-    case 'audio': voice.playBytes(ev.bytes); break;
+    case 'bubble': showBubble(ev.text, 0); if (speakInfo) speakInfo.text = ev.text; break;
+    case 'audio': voice.playBytes(ev.bytes, { text: ev.text }); break;
     case 'tts-text': voice.speakSystem(ev.sentences, cfg.settings.tts.system); break;
     case 'speak-end':
       if (ev.muted) {
-        const ms = Math.min(12000, Math.max(2000, (speakInfo ? speakInfo.text.length : 20) * 65));
+        const ms = Math.min(12000, Math.max(2000, (ev.length || (speakInfo ? speakInfo.text.length : 20)) * 45));
         setTimeout(() => { ch.stopActions(); setTimeout(hideBubble, 1500); }, ms);
       } else voice.markStreamDone();
       break;
-    case 'cancel': voice.stopSpeaking(); ch.stopActions(); hideBubble(); break;
+    case 'cancel': voice.stopSpeaking(); ch.face.stopSpeech(); ch.stopActions(); hideBubble(); break;
     case 'adhan':
       showBubble(ev.text, 8000);
       if (ev.pose) ch.command('adhan', { hold: true });
@@ -170,6 +173,7 @@ api.onPipeline(async (ev) => {
     case 'rt-done': voice.rtDoneNow(); break;
     case 'rt-text': if (a.muted || a.bubbleAlways) showBubble(ev.text, Math.min(12000, Math.max(3000, ev.text.length * 65))); break;
     case 'rt-state': if (ev.state === 'closed' && voice.live) { micOff(); showBubble('The live conversation ended.', 3000); } break;
+    case 'notice': showBubble(ev.text, 8000); break;
     case 'error': showBubble(ev.text, 7000); break;
     default: break;
   }

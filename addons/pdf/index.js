@@ -5,7 +5,7 @@ module.exports = {
   tools: {
     async read({ path: p, fromPage = 1, toPage = 0, maxChars = 30000 }, ctx) {
       const pdf = require('pdf-parse/lib/pdf-parse.js');
-      const buf = fs.readFileSync(ctx.safePath(p));
+      const buf = fs.readFileSync(await ctx.access(p, 'read'));
       const pages = [];
       const info = await pdf(buf, {
         max: toPage || 0,

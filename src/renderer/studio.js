@@ -4,6 +4,7 @@ import { Character } from '../shared/character.js';
 import { BONES, GROUPS, groupOf, autoMap } from '../shared/schema.js';
 import { builtinClips, sampleTrack, INTENTS } from '../shared/clips.js';
 import { RIG_TEMPLATES, makeTemplate, makeFingers, makeFace } from '../shared/rigbuilder.js';
+import { VISEMES, ROLES, DEFAULT_OPTS, autoFace } from '../shared/face.js';
 
 const api = window.api;
 const $ = (id) => document.getElementById(id);
@@ -102,7 +103,7 @@ const TABS = [['bones', 'Bones'], ['pose', 'Pose'], ['fix', 'Fix motions'], ['cr
 function setTab(t) {
   tab = t;
   for (const b of $('tabs').children) b.classList.toggle('on', b.dataset.tab === t);
-  ch.mode = t === 'fix' || t === 'create' ? 'preview' : t === 'test' ? 'engine' : 'rest';
+  ch.mode = t === 'fix' || t === 'create' ? 'preview' : t === 'test' || t === 'face' ? 'engine' : 'rest';
   if (ch.mode === 'rest') ch.applyRestPose();
   if (ch.mode === 'engine') ch.actions = [];
   markTarget = null;
@@ -441,56 +442,173 @@ const applyAcc = () => ch.setAccessories(accList, cfg.accessories, loadAccFile);
 api.onAddonsChanged(async () => { accList = await api.accessoriesList(); applyAcc(); if (tab === 'acc') renderPanel(); });
 
 function panelAcc() {
-  if (!accList.length) return notice('No accessories yet. Open Add-ons from the tray menu and install an accessories add-on (for example "party-pack").');
-  cfg.accessories ||= {};
+  cfg.accessories ||= {}; cfg.hiddenMeshes ||= [];
   const apply = () => { save({ accessories: cfg.accessories }); applyAcc(); };
+  const toggle = (d, on) => {
+    (cfg.accessories[d.id] ||= {}).on = on;
+    if (on && d.type === 'outfit' && d.slot) for (const o of accList) if (o.id !== d.id && o.type === 'outfit' && o.slot === d.slot && cfg.accessories[o.id]) cfg.accessories[o.id].on = false;
+    apply(); renderPanel();
+  };
+  const cards = accList.map((d) => {
+    const s = (cfg.accessories[d.id] ||= {});
+    const head = h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!s.on, onchange: (e) => toggle(d, e.target.checked) }), ` ${d.name} `,
+      h('span', { class: 'muted' }, d.type === 'outfit' ? `(outfit: ${d.slot || 'any'})` : `(${d.bone || 'head'})`));
+    if (d.type === 'outfit' || !s.on) return h('div', { class: 'box' }, head);
+    const off = s.offset || d.offset || [0, 0, 0], rot = s.rot || d.rotation || [0, 0, 0];
+    return h('div', { class: 'box' }, head,
+      [['Left - right', 0], ['Down - up', 1], ['Back - front', 2]].map(([l, i]) => slider(l, off[i], -0.5, 0.5, 0.005, (v) => { const o = [...(s.offset || d.offset || [0, 0, 0])]; o[i] = v; s.offset = o; apply(); })),
+      ['Tilt (X)', 'Turn (Y)', 'Roll (Z)'].map((l, i) => slider(l, rot[i], -180, 180, 1, (v) => { const r = [...(s.rot || d.rotation || [0, 0, 0])]; r[i] = v; s.rot = r; apply(); })),
+      slider('Size', s.scale ?? d.scale ?? 1, 0.01, 5, 0.01, (v) => { s.scale = v; apply(); }),
+      h('div', { class: 'btns' }, h('button', { onclick: () => { cfg.accessories[d.id] = { on: true }; apply(); renderPanel(); } }, 'Reset position')));
+  });
+  const names = [...new Set(ch.baseMeshes.map((m) => m.name || '(unnamed)'))];
+  const meshes = names.length ? h('details', {}, h('summary', {}, `Character meshes (${names.length}) - hide parts that poke through clothes`),
+    names.map((n) => h('label', { class: 'chk', style: 'display:block' }, h('input', { type: 'checkbox', checked: !cfg.hiddenMeshes.includes(n), onchange: (e) => {
+      const set = new Set(cfg.hiddenMeshes);
+      if (e.target.checked) set.delete(n); else set.add(n);
+      cfg.hiddenMeshes = [...set]; save({ hiddenMeshes: cfg.hiddenMeshes });
+      ch.cfgHidden = new Set(cfg.hiddenMeshes); ch.applyHidden();
+    } }), ` ${n}`))) : null;
   return h('div', {},
-    h('h3', {}, 'Accessories'),
-    h('p', { class: 'muted' }, 'They attach to a bone and follow its movement. Positions are in metres for a character 1.7 m tall.'),
-    accList.map((d) => {
-      const s = (cfg.accessories[d.id] ||= {});
-      const off = s.offset || d.offset || [0, 0, 0], rot = s.rot || d.rotation || [0, 0, 0];
-      return h('div', { class: 'box' },
-        h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!s.on, onchange: (e) => { s.on = e.target.checked; apply(); renderPanel(); } }), ` ${d.name} `, h('span', { class: 'muted' }, `(${d.bone || 'head'})`)),
-        s.on ? [
-          ['Left – right', 0], ['Down – up', 1], ['Back – front', 2]].map(([l, i]) => slider(l, off[i], -0.5, 0.5, 0.005, (v) => { const o = [...(s.offset || d.offset || [0, 0, 0])]; o[i] = v; s.offset = o; apply(); })) : null,
-        s.on ? ['Tilt (X)', 'Turn (Y)', 'Roll (Z)'].map((l, i) => slider(l, rot[i], -180, 180, 1, (v) => { const r = [...(s.rot || d.rotation || [0, 0, 0])]; r[i] = v; s.rot = r; apply(); })) : null,
-        s.on ? slider('Size', s.scale ?? d.scale ?? 1, 0.2, 3, 0.05, (v) => { s.scale = v; apply(); }) : null,
-        s.on ? h('div', { class: 'btns' }, h('button', { onclick: () => { cfg.accessories[d.id] = { on: true }; apply(); renderPanel(); } }, 'Reset position')) : null);
-    }));
+    h('h3', {}, 'Accessories and clothes'),
+    h('p', { class: 'muted' }, 'Accessories attach to a bone and follow it (positions in metres on a 1.7 m character). Outfits are skinned clothes made for the same skeleton: they bend with the body. Only one outfit per slot is worn.'),
+    accList.length ? cards : notice('Nothing installed yet.'),
+    h('div', { class: 'btns' }, h('button', { class: 'btn primary', onclick: () => api.openWindow('addons') }, 'Create or install accessories...')),
+    meshes);
 }
 
-/* ============ Face tab (mouth shape keys, jaw, eyes) ============ */
+/* ============ Face tab: mouth shapes, expressions, animations from the GLB ============ */
 let mouthTimer = 0;
+const faceCfg = () => { if (!cfg.face) cfg.face = autoFace(ch.face.names()); cfg.face.visemes ||= {}; cfg.face.roles ||= {}; cfg.face.options ||= {}; return cfg.face; };
+const commitFace = () => { save({ face: cfg.face }); ch.face.setConfig(cfg.face); };
+const detail = (title, open, ...kids) => h('details', { open }, h('summary', {}, title), ...kids);
+
+// One row: what it is, the shape keys that make it, a picker to add more, and a test button.
+function mapRow(label, list, set, test, hint) {
+  const sel = h('select', { onchange: (e) => { if (e.target.value) { list.push({ n: e.target.value, w: 1 }); set(list); } } },
+    h('option', { value: '' }, '+ shape key'), ch.face.names().map((n) => h('option', { value: n }, n)));
+  return h('div', { class: 'maprow' },
+    h('span', { class: 'lbl' }, label),
+    h('div', { class: 'chipsrow' }, list.length ? list.map((x, i) => h('span', { class: 'chip2' }, x.n,
+      h('input', { type: 'number', step: 0.1, min: 0, max: 2, value: x.w, title: 'strength', onchange: (e) => { x.w = +e.target.value; set(list); } }),
+      h('button', { class: 'x', onclick: () => { list.splice(i, 1); set(list); } }, '×'))) : [h('span', { class: 'muted' }, hint || 'not set')]),
+    sel, test ? h('button', { onclick: test }, 'Test') : null);
+}
+
+function testRole(id) {
+  const f = ch.face;
+  if (id === 'blink' || id === 'blinkL' || id === 'blinkR') f.blinkT = 0.17;
+  else if (id === 'lookLeft') f.lookAt(1, 0, 1.2); else if (id === 'lookRight') f.lookAt(-1, 0, 1.2);
+  else if (id === 'lookUp') f.lookAt(0, 1, 1.2); else if (id === 'lookDown') f.lookAt(0, -1, 1.2);
+  else if (id === 'browUp') f.pulse('browUp', 1);
+  else if (id === 'jawOpen') f.testViseme('A', 1.2);
+  else f.expression(id, 1, 1.6);
+}
+
 function panelFace() {
-  const names = new Map();
-  for (const m of ch.morphs) for (const [name, i] of Object.entries(m.morphTargetDictionary)) {
-    if (!names.has(name)) names.set(name, []);
-    names.get(name).push([m, i]);
-  }
-  const found = ['open', 'aa', 'ih', 'ou', 'ee', 'oh', 'blink'].map((k) => `${k}: ${(ch.faceIdx[k] || []).length}`).join('   ');
-  const V = ['aa', 'ee', 'ih', 'oh', 'ou'];
-  const sliders = [...names.entries()].slice(0, 120).map(([name, list]) =>
-    slider(name, list[0][0].morphTargetInfluences[list[0][1]] || 0, 0, 1, 0.01, (v) => { for (const [m, i] of list) m.morphTargetInfluences[i] = v; }));
+  const F = faceCfg();
+  const names = ch.face.names();
+  const o = { ...DEFAULT_OPTS, ...F.options };
+  const setO = (k, v) => { F.options[k] = v; commitFace(); };
+  const mappedCount = VISEMES.filter((v) => (F.visemes[v] || []).length).length;
+  const say = h('input', { type: 'text', class: 'grow', value: 'Hello, how are you today? مرحبا كيف حالك؟', dir: 'auto' });
+  const slideTarget = h('select', {}, h('option', { value: '' }, 'save the sliders as…'),
+    VISEMES.map((v) => h('option', { value: 'v:' + v }, 'Mouth shape ' + v)), ROLES.map(([id, l]) => h('option', { value: 'r:' + id }, l)));
+  const customName = h('input', { type: 'text', placeholder: 'new expression name, e.g. cheeky', style: 'width:200px' });
+  const filter = h('input', { type: 'text', placeholder: 'search shape keys…', class: 'grow' });
+  const sliderBox = h('div', {});
+  const drawSliders = () => {
+    const q = filter.value.trim().toLowerCase();
+    sliderBox.replaceChildren(...names.filter((n) => !q || n.toLowerCase().includes(q)).slice(0, 150).map((n) =>
+      slider(n, ch.face.manual[n] || 0, 0, 1, 0.01, (v) => { if (v > 0) ch.face.manual[n] = v; else delete ch.face.manual[n]; })));
+  };
+  filter.addEventListener('input', drawSliders);
+  drawSliders();
+
+  const clipCards = Object.keys(ch.glbAnims).map((name) => {
+    const c = ch.glbAnims[name];
+    const morph = c.tracks.filter((t) => /morphTargetInfluences/.test(t.name)).length, body = c.tracks.length - morph;
+    const g = (cfg.glbClips ||= {})[name] ||= {};
+    const upd = () => { save({ glbClips: cfg.glbClips }); ch.applyConfig(cfg); };
+    const list = (k) => (g[k] || []).join(', ');
+    const poseTarget = h('select', {}, h('option', { value: '' }, 'make a pose from this clip…'),
+      VISEMES.map((v) => h('option', { value: 'v:' + v }, 'Mouth shape ' + v)), ROLES.map(([id, l]) => h('option', { value: 'r:' + id }, l)));
+    poseTarget.addEventListener('change', () => {
+      if (!poseTarget.value) return;
+      const pose = ch.glbMorphPose(name);
+      if (!pose.length) return flash('This clip has no shape-key movement.');
+      const [kind, id] = poseTarget.value.split(':');
+      (kind === 'v' ? F.visemes : F.roles)[id] = pose;
+      commitFace(); flash(`${pose.length} shape keys saved as ${id}.`); renderPanel();
+    });
+    return h('div', { class: 'box' },
+      h('div', { class: 'row' }, h('strong', { class: 'grow' }, name), h('span', { class: 'muted' }, `${c.duration.toFixed(1)} s · ${morph} face tracks · ${body} body tracks`),
+        h('button', { onclick: () => { ch.mode = 'engine'; ch.playGlb(name); } }, 'Play'), h('button', { onclick: () => ch.stopGlb(true) }, 'Stop')),
+      h('div', { class: 'row' },
+        h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!g.enabled, onchange: (e) => { g.enabled = e.target.checked; upd(); } }), 'Use in the app'),
+        h('select', { value: g.target || 'morphs', onchange: (e) => { g.target = e.target.value; upd(); } },
+          [['morphs', 'face only'], ['bones', 'body only'], ['all', 'everything']].map(([v, l]) => h('option', { value: v }, l))),
+        h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!g.loop, onchange: (e) => { g.loop = e.target.checked; upd(); } }), 'loop'),
+        h('span', { class: 'muted' }, 'speed'), h('input', { type: 'number', step: 0.1, min: 0.1, max: 4, value: g.speed || 1, onchange: (e) => { g.speed = +e.target.value; upd(); } })),
+      h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Play together with'), h('input', { type: 'text', class: 'grow', value: list('together'), placeholder: 'happy, greet',
+        onchange: (e) => { g.together = e.target.value.split(',').map((s) => s.trim()).filter(Boolean); upd(); } })),
+      h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'A variant of'), h('input', { type: 'text', class: 'grow', value: list('asIntent'), placeholder: 'wink, laugh',
+        onchange: (e) => { g.asIntent = e.target.value.split(',').map((s) => s.trim()).filter(Boolean); upd(); } })),
+      morph ? h('div', { class: 'row' }, poseTarget) : null);
+  });
+
+  const roleRows = ROLES.map(([id, label]) => mapRow(label, (F.roles[id] ||= []), (l) => { F.roles[id] = l; commitFace(); renderPanel(); }, () => testRole(id)));
+  const custom = Object.keys(F.roles).filter((k) => !ROLES.some(([id]) => id === k)).map((k) => h('div', { class: 'row' },
+    h('div', { class: 'grow' }, mapRow(k, F.roles[k], (l) => { F.roles[k] = l; commitFace(); renderPanel(); }, () => ch.face.expression(k, 1, 1.6))),
+    h('button', { class: 'x', title: 'Delete', onclick: () => { delete F.roles[k]; commitFace(); renderPanel(); } }, '×')));
+
   return h('div', {},
-    h('h3', {}, 'Mouth and face'),
-    h('p', { class: 'muted' }, 'While Saeed speaks, the jaw bone opens from the sound level and the letter shape keys (A, I, U, E, O or aa, ih, ou, ee, oh) follow the voice.'),
-    h('p', {}, `Jaw bone: ${ch.map.jaw ? 'matched' : 'not matched (Bones tab)'}.  Eye bones: ${ch.map.leftEye && ch.map.rightEye ? 'matched' : 'not matched'}.`),
-    h('p', { class: 'muted' }, `Shape keys found: ${found}`),
-    names.size ? null : h('p', { class: 'warn' }, 'This model has no shape keys. Only the jaw bone will move.'),
+    h('h3', {}, 'Face'),
+    h('p', { class: 'muted' }, `${names.length} shape keys in this model. ${mappedCount} of ${VISEMES.length} mouth shapes mapped. While Saeed speaks, the letters of what he says are turned into these mouth shapes, timed to the real voice. Blinking, eyes, brows and small expressions run by themselves.`),
     h('div', { class: 'btns' },
-      h('button', { class: 'primary btn', onclick: () => {
-        clearInterval(mouthTimer);
-        const t0 = performance.now();
-        mouthTimer = setInterval(() => {
-          const t = (performance.now() - t0) / 1000;
-          if (t > 4) { clearInterval(mouthTimer); ch.setMouth({ open: 0 }); return; }
-          ch.setMouth({ open: 0.3 + 0.6 * Math.abs(Math.sin(t * 9)), vowel: V[Math.floor(t * 3) % 5] });
-        }, 45);
-      } }, 'Test talking (4 s)'),
-      h('button', { onclick: () => { clearInterval(mouthTimer); ch.setMouth({ open: 1 }); } }, 'Open wide'),
-      h('button', { onclick: () => { clearInterval(mouthTimer); ch.setMouth({ open: 0 }); } }, 'Close')),
-    names.size ? h('details', {}, h('summary', {}, `All shape keys (${names.size})`), sliders) : null);
+      h('button', { class: 'primary btn', onclick: () => { cfg.face = autoFace(names); cfg.face.options = F.options; commitFace(); renderPanel(); flash('Matched by name. Check the rows below.'); } }, 'Auto-detect by name'),
+      h('button', { onclick: () => { cfg.face = { visemes: {}, roles: {}, options: F.options }; commitFace(); renderPanel(); } }, 'Clear mapping'),
+      h('button', { onclick: () => { navigator.clipboard.writeText(JSON.stringify(F)); flash('Mapping copied.'); } }, 'Copy mapping'),
+      h('button', { onclick: async () => { try { cfg.face = JSON.parse(await navigator.clipboard.readText()); commitFace(); renderPanel(); flash('Mapping pasted.'); } catch { flash('The clipboard does not contain a mapping.'); } } }, 'Paste mapping')),
+    h('div', { class: 'row' }, say, h('button', { class: 'btn primary', onclick: () => ch.face.speakText(say.value, { duration: Math.max(1, say.value.length * 0.075), estimated: false }) }, 'Speak (lip-sync test)')),
+
+    detail('Mouth shapes (letters)', true,
+      h('p', { class: 'muted' }, 'Choose the shape key(s) that make each mouth shape. An empty shape uses the nearest mapped one. A, E, I, O, U are the vowels; F, TH, KH, G, Q, AYN, H… cover English and Arabic letters.'),
+      VISEMES.map((v) => mapRow(v, (F.visemes[v] ||= []), (l) => { F.visemes[v] = l; commitFace(); renderPanel(); }, () => ch.face.testViseme(v), 'uses the nearest shape'))),
+
+    detail('Eyes, brows, jaw, tongue and expressions', false,
+      h('p', { class: 'muted' }, 'Blink and look left/right/up/down are used automatically. Smile, sad, angry, surprised, worried, laugh, kiss, tongue out… are used when Saeed expresses them (and by "wink", "laugh" and so on in conversation).'),
+      roleRows, custom,
+      h('div', { class: 'row' }, customName, h('button', { class: 'btn', onclick: () => { const n = customName.value.trim().replace(/\s+/g, '_'); if (!n) return; F.roles[n] = F.roles[n] || []; commitFace(); renderPanel(); } }, 'Add expression'))),
+
+    detail('Shape key sliders (try values, then save them as a mouth shape or expression)', false,
+      h('div', { class: 'row' }, filter, h('button', { onclick: () => { ch.face.manual = {}; drawSliders(); } }, 'Reset sliders')),
+      sliderBox,
+      h('div', { class: 'row' }, slideTarget, h('button', { class: 'btn', onclick: () => {
+        const picked = Object.entries(ch.face.manual).filter(([, v]) => v > 0.02).map(([n, w]) => ({ n, w: +w.toFixed(2) }));
+        if (!picked.length || !slideTarget.value) return flash('Move some sliders and choose where to save them.');
+        const [kind, id] = slideTarget.value.split(':');
+        (kind === 'v' ? F.visemes : F.roles)[id] = picked;
+        commitFace(); renderPanel();
+      } }, 'Save'))),
+
+    detail(`Animations inside the GLB file (${clipCards.length})`, clipCards.length > 0,
+      h('p', { class: 'muted' }, 'Face animations (shape keys) and body animations that came with the model. Turn on "Use in the app", then they can play together with, or as variants of, what Saeed expresses. "Make a pose" turns a clip into a mouth shape or expression.'),
+      ...(clipCards.length ? clipCards : [h('p', { class: 'muted' }, 'This file has no animations.')])),
+
+    detail('Behavior', false,
+      h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Lip-sync from'), h('select', { value: o.lipSync, onchange: (e) => setO('lipSync', e.target.value) },
+        h('option', { value: 'text' }, 'the letters he says (best)'), h('option', { value: 'audio' }, 'voice loudness only'))),
+      slider('Mouth strength', o.lipGain, 0, 2, 0.05, (v) => setO('lipGain', v)),
+      slider('Jaw bone opening', o.jawBone, 0, 1.5, 0.05, (v) => setO('jawBone', v)),
+      slider('Jaw shape key opening', o.jawMorph, 0, 1.5, 0.05, (v) => setO('jawMorph', v)),
+      slider('Expression strength', o.exprGain, 0, 2, 0.05, (v) => setO('exprGain', v)),
+      h('div', { class: 'row' }, h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: o.blink, onchange: (e) => setO('blink', e.target.checked) }), 'Blink'),
+        h('span', { class: 'muted' }, 'every'), h('input', { type: 'number', min: 1, max: 12, step: 0.5, value: o.blinkEvery, onchange: (e) => setO('blinkEvery', +e.target.value) }), h('span', { class: 'muted' }, 'seconds')),
+      h('div', { class: 'row' }, h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: o.eyes, onchange: (e) => setO('eyes', e.target.checked) }), 'Eyes wander'),
+        h('span', { class: 'muted' }, 'amount'), h('input', { type: 'number', min: 0, max: 2, step: 0.1, value: o.eyeAmount, onchange: (e) => setO('eyeAmount', +e.target.value) })),
+      h('div', { class: 'row' }, h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: o.brows, onchange: (e) => setO('brows', e.target.checked) }), 'Brows react to questions and exclamations')),
+      h('div', { class: 'row' }, h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: o.micro, onchange: (e) => setO('micro', e.target.checked) }), 'Small unplanned expressions when idle'))));
 }
 
 /* ============ Rig builder tab ============ */

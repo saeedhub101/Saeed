@@ -1,47 +1,51 @@
 'use strict';
 // Runs inside an Electron utilityProcess: one process per add-on, started on demand and stopped when idle.
-const fs = require('fs');
-const os = require('os');
+// Sensitive operations (files, trash, permissions) are not done here: they are requested from the main process,
+// which applies the user's Permissions and asks when needed.
 const path = require('path');
 
 const port = process.parentPort;
-let mod = null, base = null;
+let mod = null, base = null, rid = 0;
+const waiting = new Map();
 
 function reply(id, ok, payload) {
   port.postMessage(ok ? { id, ok: true, result: payload } : { id, ok: false, error: String((payload && payload.message) || payload) });
 }
-
-// Resolves a path and refuses anything outside the folders the user allowed.
-function safePath(p, roots) {
-  const allowed = (roots && roots.length ? roots : ['Documents', 'Desktop', 'Downloads'].map((n) => path.join(os.homedir(), n))).map((r) => path.resolve(r));
-  const full = path.resolve(String(p).replace(/^~(?=$|[\\/])/, os.homedir()));
-  let probe = full;
-  while (!fs.existsSync(probe)) { const up = path.dirname(probe); if (up === probe) break; probe = up; }
-  const real = path.join(fs.realpathSync(probe), path.relative(probe, full));
-  const norm = (x) => (process.platform === 'win32' ? x.toLowerCase() : x);
-  const ok = allowed.some((r) => {
-    const rr = norm(fs.existsSync(r) ? fs.realpathSync(r) : r), x = norm(real);
-    return x === rr || x.startsWith(rr + path.sep);
-  });
-  if (!ok) throw new Error('This path is outside the folders Saeed may use. Allowed: ' + allowed.join('; ') + '. The user can add folders in Settings → Agent.');
-  return real;
+function request(type, data) {
+  const r = ++rid;
+  return new Promise((resolve, reject) => { waiting.set(r, { resolve, reject }); port.postMessage({ type, rid: r, ...data }); });
 }
+const norm = (x) => (process.platform === 'win32' ? path.resolve(x).toLowerCase() : path.resolve(x));
 
 function makeCtx(env) {
+  const blocked = (env.denyPaths || []).map(norm);
   return {
-    dataDir: base.dataDir, addonDir: base.dir, settings: env.settings || {}, allowedFolders: env.allowedFolders || [],
+    dataDir: base.dataDir, addonDir: base.dir, settings: env.settings || {},
     status: (t) => port.postMessage({ type: 'status', text: String(t) }),
     log: (...a) => console.log(...a),
-    safePath: (p) => safePath(p, env.allowedFolders),
+    // await ctx.access(path, 'read' | 'write' | 'delete' | 'delete-permanent', detail?) -> real path (throws if refused)
+    access: (p, action = 'read', detail) => request('access', { path: p, action, detail }),
+    safePath: (p, action = 'read') => request('access', { path: p, action }),
+    // await ctx.trash(path): moves to the Recycle Bin after the permission check
+    trash: (p) => request('trash', { path: p }),
+    // await ctx.permit('system.run', 'what for'): for actions that are not about a file
+    permit: (cap, detail) => request('permit', { cap, detail }),
+    // true when the folder is blocked by a rule (use it to skip folders while walking a tree)
+    isBlocked: (p) => { const n = norm(p); return blocked.some((b) => n === b || n.startsWith(b + path.sep)); },
   };
 }
 
 port.on('message', async (e) => {
   const m = e.data;
+  if (m.type === 'reply') {
+    const w = waiting.get(m.rid);
+    if (w) { waiting.delete(m.rid); if (m.ok) w.resolve(m.result); else w.reject(new Error(m.error)); }
+    return;
+  }
   try {
     if (m.type === 'init') {
       base = m;
-      fs.mkdirSync(m.dataDir, { recursive: true });
+      require('fs').mkdirSync(m.dataDir, { recursive: true });
       mod = require(path.join(m.dir, m.main));
       if (mod.activate) await mod.activate(makeCtx({}));
       reply(m.id, true, true);

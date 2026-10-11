@@ -1,7 +1,8 @@
 'use strict';
 // Add-on manager. Add-ons are folders with an addon.json manifest and a CommonJS entry file.
 // Each add-on runs in its own utility process that is started on the first call and stopped when idle.
-const { app, utilityProcess, dialog } = require('electron');
+const { app, utilityProcess, shell } = require('electron');
+const perms = require('./permissions');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -47,6 +48,7 @@ function start(a) {
   const child = utilityProcess.fork(hostPath, [], { serviceName: `saeed-${a.id}`, stdio: 'pipe' });
   p = { child, pending: new Map(), seq: 0, timer: null, since: Date.now() };
   child.on('message', (m) => {
+    if (m.type === 'access' || m.type === 'trash' || m.type === 'permit') { hostRequest(a, child, m); return; }
     if (m.type === 'status') { if (ctx.onStatus) ctx.onStatus(a.id, m.text); return; }
     const r = p.pending.get(m.id);
     if (!r) return;
@@ -82,7 +84,7 @@ async function call(a, target, name, args, signal) {
   if (signal) signal.addEventListener('abort', onAbort, { once: true });
   try {
     await p.ready;
-    const env = { allowedFolders: ctx.getSettings().agent.allowedFolders, settings: settingsOf(a) };
+    const env = { denyPaths: perms.denyList(), settings: settingsOf(a) };
     return await Promise.race([
       send(p, { type: 'call', target, name, args, env }),
       new Promise((_, rej) => setTimeout(() => rej(new Error('The add-on took too long (5 minutes).')), 300000)),
@@ -100,34 +102,47 @@ function toolDefs() {
   for (const a of list) {
     if (!isEnabled(a.id)) continue;
     for (const t of a.tools || []) {
-      out.push({ name: safeName(`${a.id}__${t.name}`), description: `[${a.name}] ${t.description}`, schema: t.schema || { type: 'object', properties: {} }, risk: t.risk || 'read', addon: a.id, tool: t.name });
+      const risk = t.risk || 'read';
+      const perm = t.perm ? [].concat(t.perm) : [risk === 'system' ? 'system.run' : risk === 'write' ? 'files.write' : 'files.read'];
+      out.push({ name: safeName(`${a.id}__${t.name}`), description: `[${a.name}] ${t.description}`, schema: t.schema || { type: 'object', properties: {} }, risk, perm, addon: a.id, tool: t.name });
     }
   }
   return out;
 }
 
-async function confirm(a, def, args) {
-  const policy = ctx.getSettings().agent.confirm;
-  if (policy === 'never' || (policy === 'writes' && def.risk === 'read')) return true;
-  if (policy === 'writes' && def.risk === 'write' && A().trusted[a.id]) return true;
-  const r = await dialog.showMessageBox({
-    type: 'question', title: 'Saeed asks for permission', buttons: ['Allow', 'Always allow this add-on', 'Deny'], defaultId: 0, cancelId: 2, noLink: true,
-    message: `${a.name}: ${def.tool}`,
-    detail: `Saeed wants to run this ${def.risk} action:\n\n${JSON.stringify(args, null, 2).slice(0, 900)}`,
-  });
-  if (r.response === 1) ctx.setSetting((s) => { s.addons.trusted[a.id] = true; });
-  return r.response !== 2;
+// Requests from an add-on process that need the user's permissions (files, trash, capabilities).
+async function hostRequest(a, child, m) {
+  const reply = (ok, v) => { try { child.postMessage({ type: 'reply', rid: m.rid, ok, ...(ok ? { result: v } : { error: v }) }); } catch { /* process gone */ } };
+  try {
+    if (m.type === 'access') reply(true, await perms.access({ addon: a.id, addonName: a.name, path: m.path, action: m.action, detail: m.detail }));
+    else if (m.type === 'trash') {
+      const real = await perms.access({ addon: a.id, addonName: a.name, path: m.path, action: 'delete', detail: 'Move to the Recycle Bin' });
+      await shell.trashItem(real);
+      reply(true, real);
+    } else {
+      const why = await perms.checkCap({ addon: a.id, addonName: a.name, cap: m.cap, detail: m.detail });
+      if (why) reply(false, why); else reply(true, true);
+    }
+  } catch (e) { reply(false, e.message); }
 }
 
 async function invokeTool(fullName, args, signal) {
   const def = toolDefs().find((d) => d.name === fullName);
   if (!def) return 'Unknown tool.';
   const a = find(def.addon);
-  if (!(await confirm(a, def, args))) return 'The user denied this action.';
+  // File permissions are checked per path inside the add-on. Here: refuse early if a permission is switched off,
+  // and ask for the permissions that are not about a file (commands, screen control, internet).
+  for (const cap of def.perm) {
+    const why = await perms.checkCap({ addon: a.id, addonName: a.name, cap, detail: `${def.tool} ${JSON.stringify(args).slice(0, 300)}`, onlyDeny: cap.startsWith('files.') });
+    if (why) return 'Denied: ' + why;
+  }
+  if (def.perm.includes('desktop.control') && ctx.onDesktop) ctx.onDesktop();
+  if (def.risk !== 'read') perms.auditEvent({ addon: a.id, cap: def.perm[0] || '', path: def.tool, detail: JSON.stringify(args).slice(0, 160) });
   try {
     const out = await call(a, 'tool', def.tool, args, signal);
-    const text = typeof out === 'string' ? out : JSON.stringify(out);
-    return text.length > 20000 ? text.slice(0, 20000) + '\n…(truncated)' : text;
+    const cut = (t) => (t.length > 20000 ? t.slice(0, 20000) + '\n…(truncated)' : t);
+    if (out && typeof out === 'object' && out.image) return { text: cut(String(out.text || '')), image: out.image };
+    return cut(typeof out === 'string' ? out : JSON.stringify(out));
   } catch (e) { return 'Error: ' + e.message; }
 }
 
@@ -239,6 +254,25 @@ async function registry() {
   });
 }
 
+/* ---------- accessory packs made from the user's own GLB files ---------- */
+function createPack(spec) {
+  const slug = String(spec.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+  if (slug.length < 2) throw new Error('Choose a name with letters or digits (a-z, 0-9).');
+  if (!spec.file || !/\.glb$/i.test(spec.file)) throw new Error('Choose a .glb file.');
+  const id = `pack-${slug}`;
+  const root = path.join(dir(), id);
+  fs.mkdirSync(path.join(root, 'files'), { recursive: true });
+  const fileName = path.basename(spec.file).replace(/[^\w.-]/g, '_');
+  fs.copyFileSync(spec.file, path.join(root, 'files', fileName));
+  const acc = { id: slug, name: spec.name, type: spec.kind === 'outfit' ? 'outfit' : 'attach', file: `files/${fileName}` };
+  if (acc.type === 'outfit') { acc.slot = spec.slot || 'top'; acc.hide = String(spec.hide || '').split(',').map((s) => s.trim()).filter(Boolean); }
+  else { acc.bone = spec.bone || 'head'; acc.offset = [0, 0, 0]; }
+  fs.writeFileSync(path.join(root, 'addon.json'), JSON.stringify({ id, name: spec.name, version: '1.0.0', description: acc.type === 'outfit' ? 'Outfit' : 'Accessory', permissions: [], accessories: [acc] }, null, 2));
+  scan();
+  if (ctx.onChange) ctx.onChange();
+  return id;
+}
+
 /* ---------- info for windows ---------- */
 function summary() {
   return list.map((a) => ({
@@ -249,4 +283,4 @@ function summary() {
 }
 const running = () => [...procs.keys()];
 
-module.exports = { init, scan, summary, toolDefs, invokeTool, providersOf, callProvider, accessories, readAddonFile, installZip, download, remove, registry, stop, stopAll, running };
+module.exports = { createPack, init, scan, summary, toolDefs, invokeTool, providersOf, callProvider, accessories, readAddonFile, installZip, download, remove, registry, stop, stopAll, running };

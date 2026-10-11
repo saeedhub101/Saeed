@@ -1,12 +1,15 @@
 import { h, toast, debounce, fmtBytes, fmtEta } from './ui.js';
 const api = window.api;
 const root = document.getElementById('root');
+let creating = false;
+const packSpec = { name: '', kind: 'attach', file: '', bone: 'head', slot: 'top', hide: '' };
 let tab = 'installed', installed = await api.addonsList(), store = null, storeErr = '';
 const bars = {};
 
 for (const b of document.querySelectorAll('#tabs2 button')) {
   b.onclick = () => { tab = b.dataset.t; for (const x of document.querySelectorAll('#tabs2 button')) x.classList.toggle('on', x === b); if (tab === 'store' && !store) loadStore(); render(); };
 }
+document.getElementById('pack').onclick = () => { tab = 'installed'; creating = !creating; for (const x of document.querySelectorAll('#tabs2 button')) x.classList.toggle('on', x.dataset.t === 'installed'); render(); };
 document.getElementById('zip').onclick = async () => {
   const r = await api.addonsInstallZip();
   if (r.ok) toast(`${r.addon} installed.`); else if (r.error !== 'Cancelled.') toast(r.error);
@@ -79,10 +82,33 @@ function storeCard(e) {
     h('div', { class: 'chips' }, (e.permissions || []).map(chip)), b, t);
 }
 
+// Makes an add-on from the user's own GLB: a hat, a bag, or clothes made for the same skeleton.
+function packCard() {
+  const S = packSpec;
+  const field = (label, ...els) => h('div', { class: 'row' }, h('span', { class: 'lbl' }, label), ...els);
+  const txt = (k, ph) => h('input', { type: 'text', class: 'grow', value: S[k], placeholder: ph || '', oninput: (e) => { S[k] = e.target.value; } });
+  const BONES = ['head', 'neck', 'chest', 'hips', 'leftShoulder', 'rightShoulder', 'leftHand', 'rightHand', 'leftFoot', 'rightFoot'];
+  return h('div', { class: 'card' }, h('h4', {}, 'New accessory pack'),
+    h('div', { class: 'meta' }, 'Turn a .glb file into an accessory or an outfit. Attach: the part follows one bone (hat, flag, bag). Outfit: clothes skinned to the same skeleton as the character (same bone names), they bend with the body.'),
+    field('Name', txt('name', 'Blue jacket')),
+    field('Kind', h('select', { value: S.kind, onchange: (e) => { S.kind = e.target.value; render(); } },
+      h('option', { value: 'attach' }, 'Attach to a bone'), h('option', { value: 'outfit' }, 'Outfit (same skeleton)'))),
+    field('GLB file', h('input', { type: 'text', class: 'grow', value: S.file, readonly: true }), h('button', { class: 'btn', onclick: async () => { const f = await api.pickFile(['glb']); if (f) { S.file = f; if (!S.name) S.name = f.split(/[\\/]/).pop().replace(/\.glb$/i, ''); render(); } } }, 'Browse…')),
+    S.kind === 'attach'
+      ? field('Bone', h('select', { value: S.bone, onchange: (e) => { S.bone = e.target.value; } }, BONES.map((b) => h('option', { value: b }, b))))
+      : [field('Slot', txt('slot', 'top, bottom, shoes, full')), field('Hide body meshes', txt('hide', 'Body_Shirt, Body_Arms'))],
+    h('div', { class: 'btns' },
+      h('button', { class: 'btn primary', onclick: async () => {
+        const r = await api.addonsCreatePack({ ...S });
+        if (r.ok) { toast('Created. Turn it on in the tray menu or Studio → Accessories.'); creating = false; S.name = ''; S.file = ''; render(); } else toast(r.error);
+      } }, 'Create'),
+      h('button', { class: 'btn', onclick: () => { creating = false; render(); } }, 'Cancel')));
+}
+
 function render() {
   const y = window.scrollY;
   if (tab === 'installed') {
-    root.replaceChildren(...(installed.length ? installed.map(installedCard) : [h('div', { class: 'empty' }, 'No add-ons installed yet. Open the Store tab, or install one from a file.')]));
+    root.replaceChildren(...(creating ? [packCard()] : []), ...(installed.length ? installed.map(installedCard) : [h('div', { class: 'empty' }, 'No add-ons installed yet. Open the Store tab, or install one from a file.')]));
   } else {
     root.replaceChildren(
       h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: loadStore }, 'Refresh list')),

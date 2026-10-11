@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, nativeImage, screen, session } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, nativeImage, screen, session, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { DEFAULT_SETTINGS, merge } = require('./settings');
@@ -11,6 +11,7 @@ const updater = require('./updater');
 const brain = require('./brain');
 const pipeline = require('./pipeline');
 const prayer = require('./prayer');
+const perms = require('./permissions');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 app.setAppUserModelId('com.avataragent.app');
@@ -18,6 +19,7 @@ app.setAppUserModelId('com.avataragent.app');
 const AV = { w: 420, h: 600 };
 const DEFAULTS = {
   modelPath: null, modelYaw: 0, boneMap: {}, restPose: {}, clips: {}, overrides: {}, customRig: null, intents: {},
+  hiddenMeshes: [], face: null, glbClips: {}, faceMaps: {},
   zoom: 1, fps: 30, clickThrough: true, windowPos: null, visible: true,
   accessories: {},      // { 'addon:accessory': { on, offset, rot, scale } }
   settings: DEFAULT_SETTINGS,
@@ -36,6 +38,12 @@ function loadCfg() {
   try { cfg = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; } catch { cfg = { ...DEFAULTS }; }
   cfg.settings = merge(DEFAULT_SETTINGS, cfg.settings);
   if (String(cfg.settings.stt.provider) === 'local') cfg.settings.stt.provider = 'openai';   // moved to the Whisper add-on
+  // Old "allowed folders" become allow rules in Permissions.
+  const ag = cfg.settings.agent || {};
+  for (const f of Array.isArray(ag.allowedFolders) ? ag.allowedFolders : []) {
+    if (!cfg.settings.permissions.locations.some((r) => r.path === f)) cfg.settings.permissions.locations.push({ path: f, mode: 'allow' });
+  }
+  delete ag.allowedFolders; delete ag.confirm;
 }
 // Change settings from the main process and tell every window.
 function setSetting(fn) { fn(cfg.settings); cfg.settings = merge(DEFAULT_SETTINGS, cfg.settings); saveCfg(); broadcast(null); }
@@ -128,6 +136,7 @@ const SIZES = {
   settings: { width: 940, height: 800, title: 'Saeed settings' },
   chat: { width: 460, height: 660, title: 'Chat with Saeed' },
   addons: { width: 920, height: 720, title: 'Saeed add-ons' },
+  permissions: { width: 980, height: 820, title: 'Saeed permissions' },
   update: { width: 430, height: 270, title: 'Saeed update', resizable: false, minimizable: false, maximizable: false, alwaysOnTop: true },
 };
 function openWin(kind) {
@@ -150,7 +159,9 @@ async function pickModel() {
     title: 'Choose a character', properties: ['openFile'], filters: [{ name: 'GLB model', extensions: ['glb'] }],
   });
   if (r.canceled || !r.filePaths[0]) return null;
-  Object.assign(cfg, { modelPath: r.filePaths[0], boneMap: {}, restPose: {}, overrides: {}, customRig: null });
+  if (cfg.modelPath) cfg.faceMaps[cfg.modelPath] = { face: cfg.face, glbClips: cfg.glbClips };   // each character keeps its own face mapping
+  const saved = cfg.faceMaps[r.filePaths[0]] || {};
+  Object.assign(cfg, { modelPath: r.filePaths[0], boneMap: {}, restPose: {}, overrides: {}, customRig: null, face: saved.face || null, glbClips: saved.glbClips || {} });
   saveCfg(); broadcast(null);
   return cfg;
 }
@@ -187,6 +198,7 @@ function buildTray() {
     } },
     { type: 'separator' },
     { label: 'Settings…', click: () => openWin('settings') },
+    { label: 'Permissions…', click: () => openWin('permissions') },
     { label: 'Add-ons…', click: () => openWin('addons') },
     { label: 'Change character…', click: pickModel },
     { label: 'Studio', submenu: [
@@ -201,7 +213,11 @@ function buildTray() {
       { label: 'adhan', click: () => triggerAdhan('Dhuhr') }] },
     ...(accs.length ? [{ label: 'Accessories', submenu: accs.map((x) => ({
       label: x.name, type: 'checkbox', checked: !!(cfg.accessories[x.id] && cfg.accessories[x.id].on),
-      click: (i) => { cfg.accessories[x.id] = { ...(cfg.accessories[x.id] || {}), on: i.checked }; saveCfg(); broadcast(null); },
+      click: (i) => {
+        cfg.accessories[x.id] = { ...(cfg.accessories[x.id] || {}), on: i.checked };
+        if (i.checked && x.type === 'outfit' && x.slot) for (const y of accs) if (y.id !== x.id && y.type === 'outfit' && y.slot === x.slot && cfg.accessories[y.id]) cfg.accessories[y.id].on = false;
+        saveCfg(); broadcast(null); buildTray();
+      },
     })) }] : []),
     { type: 'separator' },
     ...(cfg.settings.prayer.enabled && nx ? [{ label: `Next prayer: ${nx.name} ${nx.time}`, enabled: false }] : []),
@@ -214,8 +230,37 @@ function buildTray() {
   ]));
 }
 
+/* ---------------- Screen control: visible banner, emergency stop ---------------- */
+let banner = null, desktopTimer = 0, shortcutOn = false;
+function createBanner() {
+  const b = screen.getPrimaryDisplay().bounds;
+  banner = new BrowserWindow({
+    width: 560, height: 46, x: Math.round(b.x + b.width / 2 - 280), y: b.y + 6, frame: false, transparent: true, alwaysOnTop: true,
+    skipTaskbar: true, focusable: false, resizable: false, hasShadow: false,
+    webPreferences: { preload, contextIsolation: true, sandbox: true },
+  });
+  banner.setAlwaysOnTop(true, 'screen-saver');
+  banner.setContentProtection(true);            // not part of screenshots, so the model never sees it
+  banner.loadFile(page('banner.html'));
+  banner.on('closed', () => { banner = null; });
+}
+function desktopPing() {                        // called whenever a screen-control tool runs
+  if (!alive(banner)) createBanner();
+  if (!shortcutOn) shortcutOn = globalShortcut.register('Control+Alt+X', stopEverything);
+  if (alive(avatarWin)) avatarWin.setContentProtection(true);
+  clearTimeout(desktopTimer);
+  desktopTimer = setTimeout(desktopOff, 25000);
+}
+function desktopOff() {
+  clearTimeout(desktopTimer);
+  if (alive(banner)) banner.close();
+  banner = null;
+  if (shortcutOn) { globalShortcut.unregister('Control+Alt+X'); shortcutOn = false; }
+  if (alive(avatarWin)) avatarWin.setContentProtection(false);
+}
+
 function stopEverything() {
-  pipeline.cancel(); realtime.stop(); addons.stopAll();
+  pipeline.cancel(); realtime.stop(); addons.stopAll(); perms.endTask(); desktopOff();
   bus.avatar({ type: 'rt-state', state: 'closed' });
 }
 
@@ -274,6 +319,13 @@ ipcMain.on('chat:cancel', () => pipeline.cancel());
 ipcMain.handle('chat:history', () => brain.history());
 ipcMain.handle('chat:clear', () => { brain.clear(); return true; });
 
+// permissions
+ipcMain.handle('perm:info', () => perms.info());
+ipcMain.handle('perm:set', (_e, p) => { setSetting((s) => { s.permissions = p; }); return true; });
+ipcMain.handle('perm:log', () => perms.readLog(120));
+ipcMain.handle('perm:clear-log', () => { perms.clearLog(); return true; });
+ipcMain.handle('perm:explain', (_e, p, action) => { try { return perms.explain(p, action); } catch (e) { return { error: e.message }; } });
+
 // add-ons
 const sendTo = (kind, ch, ...a) => { if (alive(wins[kind])) wins[kind].webContents.send(ch, ...a); };
 ipcMain.handle('addons:list', () => addons.summary());
@@ -306,6 +358,8 @@ ipcMain.handle('addons:install-zip', async () => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.handle('accessories:list', () => addons.accessories());
+ipcMain.handle('addons:create-pack', (_e, spec) => { try { return { ok: true, id: addons.createPack(spec) }; } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.on('banner:stop', () => stopEverything());
 ipcMain.handle('addon:file', (_e, id, rel) => addons.readAddonFile(id, rel));
 
 // live conversation
@@ -354,6 +408,7 @@ ipcMain.on('prayer:test', () => triggerAdhan('Dhuhr'));
 /* ---------------- Lifecycle ---------------- */
 app.on('second-instance', () => setVisible(true));
 app.on('window-all-closed', () => { /* stay alive in the tray */ });
+app.on('will-quit', () => globalShortcut.unregisterAll());
 app.whenReady().then(() => {
   loadCfg();
   session.defaultSession.setPermissionRequestHandler((_wc, permission, cb) => cb(permission === 'media'));
@@ -361,10 +416,11 @@ app.whenReady().then(() => {
   createAvatar();
   buildTray();
   prayer.start({ getSettings: () => cfg.settings, onAdhan: triggerAdhan, onUpdate: buildTray });
+  perms.init({ getSettings: () => cfg.settings, setSetting, notify: (t) => { bus.chat({ type: 'state', text: t }); bus.avatar({ type: 'notice', text: t }); } });
   addons.init({
     getSettings: () => cfg.settings, setSetting,
     onStatus: (_id, text) => bus.chat({ type: 'state', text }),
-    onChange: notifyAddons,
+    onChange: notifyAddons, onDesktop: desktopPing,
   });
   let silent = false;
   updater.init({ emit: (st) => {

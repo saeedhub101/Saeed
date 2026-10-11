@@ -5,6 +5,10 @@ const { shell } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const os = require('os');
+const perms = require('./permissions');
+
+// Returns a reason when opening is not allowed (Permissions → "Open apps, files and folders").
+const mayOpen = (what) => perms.checkCap({ addon: 'core', addonName: 'Saeed', cap: 'apps.open', detail: `Open ${what}` });
 
 const norm = (s) => String(s || '').toLowerCase()
   .replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
@@ -49,6 +53,8 @@ async function openItem(query, settings) {
   const all = [...userItems(settings), ...BUILTIN];
   const hit = all.find((i) => i.names.includes(q)) || all.find((i) => i.names.some((n) => n && (q.includes(n) || n.includes(q))));
   if (!hit) return `I do not have "${query}" in my list. Add it in Settings → Quick launch.`;
+  const why = await mayOpen(hit.id);
+  if (why) return 'Denied: ' + why;
   const err = await hit.run();
   return err ? `Could not open ${hit.id}: ${err}` : `Opened ${hit.id}.`;
 }
@@ -81,6 +87,7 @@ async function route(text, settings) {
     const target = m[1].replace(/^(?:ملف|برنامج|تطبيق|the|file|app|program)\s+/, '');
     const hit = all.find((i) => i.names.includes(target)) || all.find((i) => i.names.some((n) => n && target.includes(n)));
     if (hit) {
+      if (await mayOpen(hit.id)) return { reply: ar ? `ليس لدي إذن لفتح ${hit.id}.` : `I am not allowed to open ${hit.id}. You can change this in Permissions.` };
       const err = await hit.run();
       if (err) return { reply: ar ? `لم أستطع فتح ${hit.id}.` : `I could not open ${hit.id}.` };
       return { reply: ar ? `فتحت ${hit.id}.` : `Opening ${hit.id}.` };
@@ -89,4 +96,4 @@ async function route(text, settings) {
   return null;
 }
 
-module.exports = { route, openItem, timeText, isArabic };
+module.exports = { route, openItem, timeText, isArabic, norm };

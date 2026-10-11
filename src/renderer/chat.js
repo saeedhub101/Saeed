@@ -9,10 +9,16 @@ function add(role, text, voice) {
 }
 for (const m of await api.chatHistory()) add(m.role, m.text);
 
+let live = null;   // the assistant message that is being written
 api.onChatEvent((ev) => {
-  if (ev.type === 'message') add(ev.role, ev.text, ev.source === 'voice' && ev.role === 'user');
-  else if (ev.type === 'state') stateEl.textContent = ev.text || '';
-  else if (ev.type === 'error') add('error', ev.text);
+  if (ev.type === 'delta') {
+    if (!live) { live = h('div', { class: 'msg assistant', dir: 'auto' }, ''); list.append(live); }
+    live.textContent += ev.text; list.scrollTop = list.scrollHeight;
+  } else if (ev.type === 'message') {
+    if (ev.role === 'assistant' && live) { live.textContent = ev.text; live = null; }
+    else { live = null; add(ev.role, ev.text, ev.source === 'voice' && ev.role === 'user'); }
+  } else if (ev.type === 'state') stateEl.textContent = ev.text || '';
+  else if (ev.type === 'error') { live = null; add('error', ev.text); }
   else if (ev.type === 'tool') add('tool', '⚙ ' + ev.text);
 });
 

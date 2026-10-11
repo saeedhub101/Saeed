@@ -32,7 +32,7 @@ async function runTool(ev) {
     onIntent: (n) => bus.avatar({ type: 'intent', name: n }),
     onTool: (t) => bus.chat({ type: 'tool', text: `${t.name} ${JSON.stringify(t.args).slice(0, 140)}` }),
   });
-  send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: ev.call_id, output: String(out) } });
+  send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: ev.call_id, output: typeof out === 'string' ? out : String((out && out.text) || '') } });
   send({ type: 'response.create' });
 }
 

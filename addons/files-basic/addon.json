@@ -1,15 +1,196 @@
 {
-  "id": "files-basic", "name": "Files", "version": "1.0.0", "author": "Saeed",
-  "description": "List folders, read and write text files, find files (inside the folders you allow).",
-  "main": "index.js", "permissions": ["files:read", "files:write"], "idleSeconds": 60,
+  "id": "files-basic",
+  "name": "Files",
+  "version": "1.1.0",
+  "author": "Saeed",
+  "description": "List folders, read, write, copy, move and delete files, find files. Every action follows your Permissions.",
+  "main": "index.js",
+  "permissions": [
+    "files:read",
+    "files:write",
+    "files:delete"
+  ],
+  "idleSeconds": 60,
   "tools": [
-    { "name": "list_folder", "risk": "read", "description": "List the files and folders inside a folder.",
-      "schema": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] } },
-    { "name": "read_text", "risk": "read", "description": "Read a text, CSV or JSON file.",
-      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "maxChars": { "type": "number" } }, "required": ["path"] } },
-    { "name": "write_text", "risk": "write", "description": "Create or overwrite a text file (or append to it).",
-      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "content": { "type": "string" }, "append": { "type": "boolean" } }, "required": ["path", "content"] } },
-    { "name": "find_files", "risk": "read", "description": "Find files by part of their name inside a folder (searches sub-folders).",
-      "schema": { "type": "object", "properties": { "folder": { "type": "string" }, "contains": { "type": "string" }, "maxResults": { "type": "number" } }, "required": ["folder", "contains"] } }
+    {
+      "name": "list_folder",
+      "risk": "read",
+      "description": "List the files and folders inside a folder.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "perm": [
+        "files.read"
+      ]
+    },
+    {
+      "name": "read_text",
+      "risk": "read",
+      "description": "Read a text, CSV or JSON file.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "maxChars": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "perm": [
+        "files.read"
+      ]
+    },
+    {
+      "name": "write_text",
+      "risk": "write",
+      "description": "Create or overwrite a text file (or append to it).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "append": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      },
+      "perm": [
+        "files.write"
+      ]
+    },
+    {
+      "name": "find_files",
+      "risk": "read",
+      "description": "Find files by part of their name inside a folder (searches sub-folders).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "folder": {
+            "type": "string"
+          },
+          "contains": {
+            "type": "string"
+          },
+          "maxResults": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "folder",
+          "contains"
+        ]
+      },
+      "perm": [
+        "files.read"
+      ]
+    },
+    {
+      "name": "make_folder",
+      "risk": "write",
+      "perm": [
+        "files.write"
+      ],
+      "description": "Create a folder (and missing parent folders).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    },
+    {
+      "name": "copy_path",
+      "risk": "write",
+      "perm": [
+        "files.write"
+      ],
+      "description": "Copy a file or folder to a new place.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "move_path",
+      "risk": "write",
+      "perm": [
+        "files.write"
+      ],
+      "description": "Move or rename a file or folder.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ]
+      }
+    },
+    {
+      "name": "delete_path",
+      "risk": "write",
+      "perm": [
+        "files.delete"
+      ],
+      "description": "Delete a file or folder. By default it goes to the Recycle Bin. permanent:true deletes without the Recycle Bin (needs its own permission).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "permanent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    }
   ]
 }

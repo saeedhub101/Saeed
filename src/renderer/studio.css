@@ -74,3 +74,9 @@ summary { cursor: pointer; color: var(--muted); }
 .notice { padding: 18px 4px; color: var(--muted); }
 
 #toast { position: fixed; left: 16px; bottom: 16px; background: var(--raise); border: 1px solid var(--line); border-left: 3px solid var(--warn); padding: 8px 12px; border-radius: 5px; max-width: 420px; }
+.maprow { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.maprow .lbl { flex: 0 0 90px; font-weight: 600; }
+.chipsrow { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.chip2 { display: inline-flex; align-items: center; gap: 4px; background: var(--raise); border: 1px solid var(--line); border-radius: 12px; padding: 1px 4px 1px 9px; font-size: 12px; }
+.chip2 input { width: 44px; padding: 1px 3px; font-size: 11px; }
+.maprow select { width: 118px; }

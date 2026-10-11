@@ -13,6 +13,19 @@ export function resample(x, from, to, gain) {
   return o;
 }
 
+// Loudness of a decoded voice, 50 values per second, and where the real speech starts and ends (trims silence).
+function envelope(buf) {
+  const d = buf.getChannelData(0), hop = Math.max(1, Math.floor(buf.sampleRate / 50)), n = Math.floor(d.length / hop);
+  const env = new Float32Array(n);
+  let mx = 0;
+  for (let i = 0; i < n; i++) { let s = 0; for (let k = i * hop; k < (i + 1) * hop; k++) s += d[k] * d[k]; env[i] = Math.sqrt(s / hop); if (env[i] > mx) mx = env[i]; }
+  if (mx > 0) for (let i = 0; i < n; i++) env[i] = Math.min(1, env[i] / mx);
+  let a = 0, b = n - 1;
+  while (a < n && env[a] < 0.06) a++;
+  while (b > a && env[b] < 0.06) b--;
+  return { env, lead: a / 50, dur: Math.max(0.2, (b - a + 1) / 50) };
+}
+
 const WORKLET = `class Capture extends AudioWorkletProcessor {
   constructor() { super(); this.b = []; this.n = 0; }
   process(inputs) {
@@ -39,6 +52,7 @@ export class Voice {
     this.paused = false;
     this.out = null; this.queue = []; this.cur = null; this.kind = 'speech'; this.pending = 0; this.doneFlag = true;
     this.speaking = false; this.sys = false; this.gen = 0; this.mouthTimer = 0;
+    this.sysPending = 0;
     this.live = false; this.liveSrcs = new Set(); this.nextT = 0; this.rtDone = true; this.closeTimer = 0;
   }
   get a() { return this.getSettings().audio; }
@@ -130,8 +144,12 @@ export class Voice {
     this.td = new Uint8Array(this.an.fftSize); this.fd = new Uint8Array(this.an.frequencyBinCount);
   }
   beginStream() { this.doneFlag = false; }
-  markStreamDone() { this.doneFlag = true; this.maybeEnd(); }
-  async playBytes(bytes, { kind = 'speech', volume = 1 } = {}) {
+  markStreamDone() {
+    this.doneFlag = true;
+    if (this.sys && this.sysPending <= 0) { this.sys = false; this.setSpeaking(false); return; }
+    this.maybeEnd();
+  }
+  async playBytes(bytes, { kind = 'speech', volume = 1, text = '' } = {}) {
     this.ensureOut();
     const g = this.gen;
     this.pending++;
@@ -139,7 +157,7 @@ export class Voice {
       if (this.out.state === 'suspended') await this.out.resume();
       const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
       const buf = await this.out.decodeAudioData(ab);
-      if (g === this.gen) { this.queue.push({ buf, kind, volume }); this.pump(); }
+      if (g === this.gen) { this.queue.push({ buf, kind, volume, text, env: text ? envelope(buf) : null }); this.pump(); }
     } catch (e) { this.hooks.onError?.('Could not play the audio: ' + e.message); }
     finally { this.pending--; this.maybeEnd(); }
   }
@@ -156,6 +174,7 @@ export class Voice {
     this.gain.gain.value = this.a.volume * (it.volume ?? 1);
     this.cur = src; this.kind = it.kind; this.paused = it.kind === 'adhan';
     this.setSpeaking(true);
+    if (it.text && it.env) this.hooks.onChunk?.({ text: it.text, lead: it.env.lead, duration: it.env.dur, env: it.env.env });
     src.onended = () => { if (this.cur !== src) return; this.cur = null; this.pump(); this.maybeEnd(); };
     src.start();
     this.startMouth();
@@ -177,7 +196,7 @@ export class Voice {
     this.gen++;
     this.queue = [];
     try { if (this.cur) { this.cur.onended = null; this.cur.stop(); } } catch { /* already stopped */ }
-    this.cur = null; this.sys = false; this.doneFlag = true;
+    this.cur = null; this.sys = false; this.sysPending = 0; this.doneFlag = true;
     for (const s of this.liveSrcs) { s.onended = null; try { s.stop(); } catch { /* stopped */ } }
     this.liveSrcs.clear(); this.nextT = 0; this.rtDone = true;
     try { speechSynthesis.cancel(); } catch { /* none */ }
@@ -208,20 +227,31 @@ export class Voice {
   rtDoneNow() { this.rtDone = true; if (!this.liveSrcs.size) this.setSpeaking(false); }
 
   /** Windows system voices (no network). Mouth movement is simulated because the audio is not capturable. */
-  speakSystem(sentences, tts) {
-    this.stopSpeaking();
-    const gen = ++this.gen;
-    this.sys = true; this.kind = 'speech'; this.doneFlag = true;
-    this.setSpeaking(true); this.startMouth();
+  speakSystem(sentences, tts) { for (const t of sentences) this.sayChunk(t, tts); }
+
+  // Adds one sentence to the queue. The first call starts a new speech; markStreamDone() ends it after the last sentence.
+  sayChunk(text, tts) {
+    if (!this.sys) {
+      this.gen++;
+      this.sys = true; this.sysPending = 0; this.kind = 'speech'; this.doneFlag = false;
+      try { speechSynthesis.cancel(); } catch { /* none */ }
+      this.setSpeaking(true); this.startMouth();
+    }
+    const gen = this.gen;
     const voice = speechSynthesis.getVoices().find((v) => v.name === tts.voice);
-    sentences.forEach((t, i) => {
-      const u = new SpeechSynthesisUtterance(t);
-      if (voice) u.voice = voice; else u.lang = /[\u0600-\u06FF]/.test(t) ? 'ar-SA' : 'en-US';
-      u.rate = tts.rate || 1; u.pitch = tts.pitch || 1; u.volume = this.a.volume;
-      const end = () => { if (gen !== this.gen || i < sentences.length - 1) return; this.sys = false; this.setSpeaking(false); };
-      u.onend = end; u.onerror = end;
-      speechSynthesis.speak(u);
-    });
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice; else u.lang = /[\u0600-\u06FF]/.test(text) ? 'ar-SA' : 'en-US';
+    u.rate = tts.rate || 1; u.pitch = tts.pitch || 1; u.volume = this.a.volume;
+    this.sysPending++;
+    const end = () => {
+      if (gen !== this.gen) return;
+      this.sysPending--;
+      if (this.sysPending <= 0 && this.doneFlag) { this.sys = false; this.setSpeaking(false); }
+    };
+    u.onstart = () => this.hooks.onChunk?.({ text, estimated: true, duration: Math.max(0.5, (text.length * 0.07) / (tts.rate || 1)) });
+    u.onboundary = (e) => this.hooks.onBoundary?.(e.charIndex);
+    u.onend = end; u.onerror = end;
+    speechSynthesis.speak(u);
   }
 
   /* ---------- lip-sync levels ---------- */
