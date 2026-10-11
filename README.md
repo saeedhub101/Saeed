@@ -26,6 +26,24 @@ Tray app, transparent draggable character window, mic button, independent motion
 ### Prayer times
 One request per month to the Aladhan service, saved on the PC. Pick city, country and calculation method (Jordan: Ministry of Awqaf). Check the times against your local mosque.
 
+## Phase 5 — Saeed works like a person at the computer
+**Built in (no add-on needed, controlled only by Permissions):**
+- **Files anywhere**: `find_files` (Windows Search index first, then a fast folder walk; Desktop, Documents and Downloads by default, any folder or every drive on request), list, read, write, copy, move, delete (Recycle Bin or permanent), file info, **`open_path`** (opens any file or folder with its default program) and `view_image`. "Open test.xlsx" now finds the file by name and opens it; he no longer asks you for a path he can find himself.
+- **Commands and system**: `run_command` (PowerShell or cmd, asks unless you allow it), `system_info`.
+- **The internet in the background (no browser window)**: `web_search` (DuckDuckGo with no key, or Brave / Tavily), `web_fetch` (readable text of any page or API), `http_request` (call any web API; put passwords and tokens as `{{secret:NAME}}` and the value is filled in privately), `download_file`. Saved secrets are in Settings → Web.
+- **Memory and reminders**: Saeed remembers lasting facts (and you can edit them in Settings), and sets spoken reminders with a notification.
+
+**Add-on library (never empty any more):** the installer carries the library. On first run it installs `excel`, `word`, `pdf`, `charts`, `browser`, `database`, `desktop-control` and `party-pack`; `ocr` is offered in the Store; big or optional ones (`whisper-local`, `llm-llamacpp`, `tts-piper`) are listed with their download link. Store tabs: categories (Files and Office, Web, Data, Voice, Brains, Look), **Sources…** (add any registry.json link), **Install from link…** (a direct .zip add-on or a .glb outfit from any site), included / online badges.
+- `browser`: a real browser through your own Edge or Chrome (hidden or visible), numbered page elements instead of screenshots, a persistent profile for logins, `{{secret:…}}` for passwords. Honest limits: big sites (Facebook, Google…) may block automation or ask for a CAPTCHA / SMS code; visible mode lets you do that step while Saeed continues. Use it for your own accounts and tasks.
+- `database`: query company systems directly from their database (SQL Server, ODBC, OLE DB) with read-only `query` and guarded `execute` (one statement, WHERE required). Own permissions: *Read company databases* / *Change company databases*.
+- `pdf` (v1.2): read, search, and **render a page as an image** so catalog tables, curves and drawings can be read visually.
+- `desktop-control` (v1.1): besides screenshots, **UI Automation** tools (`ui_tree`, `ui_read`, `ui_set_text`, `ui_click`) read and fill the controls of Windows programs directly, without looking at the screen.
+- Brains and voices as add-ons: `llm-llamacpp` (Qwen / Llama / any GGUF on this PC; it appears in Settings → Brain), `tts-piper` (offline voice; Settings → Voice), `whisper-local` (Settings → Speech to text). An add-on can provide `stt`, `tts` or `llm`; the contract is in the add-on format section.
+
+**Lifecycle:** every window is destroyed when closed (its memory, timers and microphone go with it) and rebuilt when opened; add-ons start on first use and stop when idle; the browser closes with its add-on; the character draws at 12 fps when idle and about 6 fps after a minute of rest, with the pixel ratio capped at 1.5; the studio draws nothing when minimised. Settings → Performance lists the processes, windows and add-ons that are running.
+
+**Publishing:** `npm run build-addons` builds every add-on on Windows x64 (installs dependencies, downloads OCR data) into `dist-addons/` and writes `build/addons-lib` (what the installer carries) and `addons/registry.json`. Upload the zips of the optional add-ons to a GitHub release tagged `addons` and set Settings → Updates → repository. `npm run dist` runs the build automatically (set `SKIP_ADDONS=1` to reuse the last one).
+
 ## Phase 4 — streaming, screen control, charts, outfits, a living face
 - **Streaming replies**: the brain's answer is spoken while it is still being written (sentence by sentence) and appears word by word in the chat. Works with Claude and OpenAI-compatible servers; tool use and images (screenshots) work inside the same loop. Raise "Steps allowed per request" (Settings → Agent) for long tasks.
 - **Procedures** (Settings → Procedures): describe how to work in one of your company systems (program, screens, fields, order, what to check). When a request contains one of the keywords, Saeed follows that text.
@@ -43,7 +61,7 @@ One request per month to the Aladhan service, saved on the PC. Pick city, countr
 ### Add-ons (tray → Add-ons…)
 An add-on is a folder (or a .zip) with `addon.json` + `index.js`. It can provide **tools** for the brain (read an Excel file, fill a form...), **providers** (speech recognition, voices) and **accessories** (hat, flag, flowers). Each add-on runs in **its own process**, started on the first call and **stopped when idle** (default 90 s) or when Saeed is hidden. Nothing runs in the background.
 - **Installed** tab: turn on/off, add-on options, running status, stop, remove. **Store** tab: list from your GitHub repository, install with progress and checksum verification. **Install from file…** for a local .zip.
-- Included (source in `addons/`): `files-basic`, `excel` (read, write cells and formulas, rows, new workbooks), `word` (read, create with headings and tables, RTL), `pdf` (read text), `ocr` (Arabic + English from images), `whisper-local` (offline speech recognition, replaces the old built-in Whisper so the installer stays small), `party-pack` (accessories, no code).
+- Included (source in `addons/`): `excel` (read, write cells and formulas, rows, new workbooks), `word` (read, create with headings and tables, RTL), `pdf` (read text), `ocr` (Arabic + English from images), `whisper-local` (offline speech recognition, replaces the old built-in Whisper so the installer stays small), `party-pack` (accessories, no code).
 - **Safety**: every sensitive action goes through **Permissions** (below). Add-ons are programs: install only ones you trust. "Stop everything" in the tray stops the brain, the live session and every add-on.
 - **Images**: attach or paste a picture in the chat (📎 / Ctrl+V). Claude and OpenAI models read it directly, for example a catalog page to rewrite as a table.
 
@@ -104,7 +122,7 @@ npm start
 ```
 npm run dist
 ```
-Output: `dist/Avatar Agent Setup 0.4.0.exe`. Speech recognition on this PC is now the **whisper-local** add-on, so the installer stays small.
+Output: `dist/Avatar Agent Setup 0.5.0.exe` (the build also packs the add-on library into the installer, see Phase 5). Speech recognition on this PC is now the **whisper-local** add-on, so the installer stays small.
 
 ## Conventions
 Rotations are in model space (degrees), on top of the rest pose: facing +Z, +Y up, character's left = +X, rest pose = standing with arms down (Pose → Arms down). If a model faces away use "Model faces" in the Studio top bar.
@@ -124,4 +142,4 @@ src/shared/    character.js, clips.js, schema.js, rigbuilder.js, accessories.js
 ## Not done yet
 - Outfit files must be skinned to the same skeleton (same bone names and rest pose).
 - Screen control sees the main monitor only, and needs a vision-capable model.
-- Not tested on a real machine. Errors appear in a red box in each window; tray → Developer tools opens the console.
+- Not tested on a real machine (most parts were tested without a screen or Windows: parsers, permissions, SQL guards, streaming, search, add-on manifests). Errors appear in a red box in each window; tray → Developer tools opens the console.

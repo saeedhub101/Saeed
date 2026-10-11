@@ -9,7 +9,7 @@ const bubble = document.getElementById('bubble');
 
 const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' });
 renderer.setClearColor(0x000000, 0);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 renderer.setSize(innerWidth, innerHeight, false);
 
 const scene = new THREE.Scene();
@@ -231,7 +231,8 @@ function frame(now) {
   last = now;
   // Full speed while something happens, a low rate while Saeed just stands there.
   const busy = performance.now() - lastActive < 8000 || voice.speaking || ch.actions.length > 0;
-  const fps = busy ? (cfg.fps || 30) : ((cfg.settings.performance && cfg.settings.performance.idleFps) || 12);
+  const idleFps = (cfg.settings.performance && cfg.settings.performance.idleFps) || 12;
+  const fps = busy ? (cfg.fps || 30) : performance.now() - lastActive > 60000 ? Math.min(6, idleFps) : idleFps;   // resting for a minute: even slower
   if (acc < 1 / fps - 0.002) return;
   const dt = Math.min(acc, 0.1);
   acc = 0;

@@ -1,0 +1,11 @@
+{
+  "id": "tts-piper", "name": "Piper voice (offline speech)", "version": "1.0.0", "author": "Saeed", "category": "voice", "bundle": "none",
+  "description": "A natural voice that runs on this PC with no internet and no cost (Piper). The program and the voice download the first time. The default voice is Arabic (Jordan); change the voice link in the settings for any other language. Windows only.",
+  "main": "index.js", "permissions": [], "idleSeconds": 60,
+  "provides": { "tts": { "label": "Piper (offline)" } },
+  "settings": [
+    { "key": "exeUrl", "label": "Piper program (zip link)", "type": "text", "default": "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip" },
+    { "key": "voiceBase", "label": "Voice (link without .onnx)", "type": "text", "default": "https://huggingface.co/rhasspy/piper-voices/resolve/main/ar/ar_JO/kareem/medium/ar_JO-kareem-medium" },
+    { "key": "speed", "label": "Length of sounds (1 = normal, 0.8 = faster)", "type": "number", "default": 1 }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "name": "avatar-agent",
   "productName": "Avatar Agent",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Saeed: desktop 3D avatar assistant (voice, chat, brain) with a studio for bones, poses and motions.",
   "main": "src/main/main.js",
   "author": "Saeed",
@@ -9,9 +9,9 @@
   "scripts": {
     "postinstall": "node scripts/vendor.js",
     "start": "node scripts/vendor.js && electron .",
-    "predist": "node scripts/vendor.js",
+    "predist": "node scripts/vendor.js && node scripts/build-addons.js",
     "dist": "electron-builder --win nsis",
-    "release": "node scripts/vendor.js && electron-builder --win nsis --publish always",
+    "release": "node scripts/vendor.js && node scripts/build-addons.js && electron-builder --win nsis --publish always",
     "build-addons": "node scripts/build-addons.js"
   },
   "dependencies": {
@@ -61,6 +61,12 @@
         "provider": "github",
         "owner": "OWNER",
         "repo": "saeed"
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "build/addons-lib",
+        "to": "addons-lib"
       }
     ]
   }

@@ -51,6 +51,7 @@ const DEFAULT_SETTINGS = {
     caps: {
       'files.read': 'allow', 'files.write': 'ask', 'files.delete': 'ask', 'files.deletePermanent': 'deny',
       'apps.open': 'allow', 'system.run': 'ask', 'desktop.control': 'ask', 'network': 'ask',
+      'web.read': 'allow', 'web.send': 'ask', 'browser.control': 'ask', 'data.read': 'ask', 'data.write': 'ask',
     },
     defaultLocation: 'ask',            // places that match no rule below
     locations: [
@@ -63,8 +64,10 @@ const DEFAULT_SETTINGS = {
     dangerous: false,                  // allow deleting drive roots, the Windows folder and the user profile folder
   },
   updates: { repo: '', autoCheck: true },
-  addons: { registryUrl: '', enabled: {}, settings: {}, trusted: {} },
+  addons: { registryUrl: '', sources: [], enabled: {}, settings: {}, trusted: {}, removed: [] },
   performance: { idleFps: 12 },
+  web: { search: 'duckduckgo', maxResults: 6, fetchMaxChars: 12000 },   // duckduckgo (no key) | brave | tavily
+  memory: { enabled: true },
   commands: { local: true },
   launcher: [],            // [{ names: 'payroll, الرواتب', path: 'C:\\...\\salaries.xlsx' }]
 };

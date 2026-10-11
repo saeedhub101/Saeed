@@ -1,42 +1,14 @@
 {
-  "id": "pdf",
-  "name": "PDF",
-  "version": "1.1.0",
-  "author": "Saeed",
-  "description": "Read the text of PDF files, page by page. For scanned pages use the OCR add-on or attach the page image in the chat.",
-  "main": "index.js",
-  "permissions": [
-    "files:read"
-  ],
-  "idleSeconds": 60,
+  "id": "pdf", "name": "PDF", "version": "1.2.0", "author": "Saeed", "category": "files", "bundle": "auto",
+  "description": "Read the text of PDF files, search inside them, and look at a page as a picture (catalog pages with tables, curves and drawings) so Saeed can read what text extraction cannot.",
+  "main": "index.js", "permissions": ["files:read"], "idleSeconds": 60,
   "tools": [
-    {
-      "name": "read",
-      "risk": "read",
-      "description": "Read text from a PDF. Optional page range (1-based). Returns the text of each page.",
-      "schema": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "fromPage": {
-            "type": "number"
-          },
-          "toPage": {
-            "type": "number"
-          },
-          "maxChars": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "path"
-        ]
-      },
-      "perm": [
-        "files.read"
-      ]
-    }
+    { "name": "info", "risk": "read", "perm": ["files.read"], "description": "Number of pages and document information.", "schema": { "type": "object", "properties": { "path": { "type": "string" } }, "required": ["path"] } },
+    { "name": "read", "risk": "read", "perm": ["files.read"], "description": "Read the text of a PDF, optionally a page range (1-based).",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "fromPage": { "type": "number" }, "toPage": { "type": "number" }, "maxChars": { "type": "number" } }, "required": ["path"] } },
+    { "name": "search", "risk": "read", "perm": ["files.read"], "description": "Find a word or phrase in a PDF; returns the pages and the text around each hit.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "query": { "type": "string" }, "maxHits": { "type": "number" } }, "required": ["path", "query"] } },
+    { "name": "render_page", "risk": "read", "perm": ["files.read"], "description": "Draw one page as an image and look at it. Use it for tables, performance curves, drawings and scanned pages. scale 1.5 is readable; use 2.5 for small print.",
+      "schema": { "type": "object", "properties": { "path": { "type": "string" }, "page": { "type": "number" }, "scale": { "type": "number" } }, "required": ["path", "page"] } }
   ]
 }

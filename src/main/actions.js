@@ -6,6 +6,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const os = require('os');
 const perms = require('./permissions');
+const core = require('./tools-core');
 
 // Returns a reason when opening is not allowed (Permissions → "Open apps, files and folders").
 const mayOpen = (what) => perms.checkCap({ addon: 'core', addonName: 'Saeed', cap: 'apps.open', detail: `Open ${what}` });
@@ -46,13 +47,26 @@ function userItems(settings) {
   }));
 }
 
-/** Opens an allowed item by name. Only built-in apps and the user's quick launch list can be opened. */
+// Opens a file by name (or full path) wherever it is: Desktop, Documents, Downloads first, then wider if asked.
+async function openByName(name, settings) {
+  const isPath = /^[A-Za-z]:[\\/]|^\\\\|^~?[\\/]/.test(name);
+  if (isPath) { const msg = await core.run('open_path', { path: name }, { settings }); return { ok: /^Opened/.test(msg), msg, path: name }; }
+  let list;
+  try { list = await core.findFiles({ name: path.parse(name).name, ext: path.extname(name).slice(1) || undefined, limit: 12 }); } catch (e) { return { ok: false, msg: e.message }; }
+  const files = list.filter((x) => x.type === 'file');
+  const hit = files.find((x) => path.basename(x.path).toLowerCase() === name.toLowerCase()) || files[0] || list[0];
+  if (!hit) return { ok: false, msg: `I could not find "${name}" on the Desktop, Documents or Downloads.` };
+  const msg = await core.run('open_path', { path: hit.path }, { settings });
+  return { ok: /^Opened/.test(msg), msg, path: hit.path };
+}
+
+/** Opens an app from the list, or any file / folder by name or path. */
 async function openItem(query, settings) {
   const q = norm(query);
   if (!q) return 'No name was given.';
   const all = [...userItems(settings), ...BUILTIN];
   const hit = all.find((i) => i.names.includes(q)) || all.find((i) => i.names.some((n) => n && (q.includes(n) || n.includes(q))));
-  if (!hit) return `I do not have "${query}" in my list. Add it in Settings → Quick launch.`;
+  if (!hit) { const r = await openByName(String(query).trim(), settings); return r.msg; }
   const why = await mayOpen(hit.id);
   if (why) return 'Denied: ' + why;
   const err = await hit.run();
@@ -91,6 +105,12 @@ async function route(text, settings) {
       const err = await hit.run();
       if (err) return { reply: ar ? `لم أستطع فتح ${hit.id}.` : `I could not open ${hit.id}.` };
       return { reply: ar ? `فتحت ${hit.id}.` : `Opening ${hit.id}.` };
+    }
+    const fm = /([^\s\\/:*?"<>|]+\.[A-Za-z0-9]{2,5})(?=\s|$)/.exec(text);   // "open test.xlsx"
+    if (fm) {
+      const r = await openByName(fm[1], settings);
+      if (r.ok) return { reply: ar ? `فتحت ${path.basename(r.path)}.` : `Opened ${path.basename(r.path)}.` };
+      return { reply: r.msg };
     }
   }
   return null;

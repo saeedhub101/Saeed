@@ -17,11 +17,13 @@ function request(type, data) {
 }
 const norm = (x) => (process.platform === 'win32' ? path.resolve(x).toLowerCase() : path.resolve(x));
 
-function makeCtx(env) {
+function makeCtx(env, callId) {
   const blocked = (env.denyPaths || []).map(norm);
   return {
     dataDir: base.dataDir, addonDir: base.dir, settings: env.settings || {},
     status: (t) => port.postMessage({ type: 'status', text: String(t) }),
+    stream: (t) => port.postMessage({ type: 'stream', callId, text: String(t) }),   // partial text of a long answer
+    secret: (name) => request('secret', { name }),                                  // a secret saved by the user (Settings -> Web)
     log: (...a) => console.log(...a),
     // await ctx.access(path, 'read' | 'write' | 'delete' | 'delete-permanent', detail?) -> real path (throws if refused)
     access: (p, action = 'read', detail) => request('access', { path: p, action, detail }),
@@ -54,7 +56,7 @@ port.on('message', async (e) => {
         : m.target === 'stt' ? mod.stt && mod.stt.transcribe
         : m.target === 'tts' ? mod.tts && mod.tts.synthesize : null;
       if (!fn) throw new Error(`This add-on does not provide ${m.target} ${m.name || ''}`);
-      reply(m.id, true, await fn(m.args, makeCtx(m.env || {})));
+      reply(m.id, true, await fn(m.args, makeCtx(m.env || {}, m.id)));
     } else if (m.type === 'shutdown') {
       if (mod && mod.deactivate) await mod.deactivate();
       process.exit(0);

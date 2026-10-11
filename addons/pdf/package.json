@@ -1,1 +1,1 @@
-{ "name": "saeed-addon-pdf", "version": "1.0.0", "private": true, "dependencies": { "pdf-parse": "^1.1.1" } }
+{ "name": "saeed-addon-pdf", "version": "1.2.0", "private": true, "dependencies": { "pdf-parse": "^1.1.1", "pdfjs-dist": "^4.4.168", "@napi-rs/canvas": "^0.1.53" } }

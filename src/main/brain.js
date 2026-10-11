@@ -6,6 +6,8 @@ const { app } = require('electron');
 const llm = require('./llm');
 const actions = require('./actions');
 const addons = require('./addons');
+const core = require('./tools-core');
+const memory = require('./memory');
 const { dialog } = require('electron');
 
 const INTENTS = ['happy', 'sad', 'think', 'yes', 'no', 'greet', 'bow', 'sit', 'lie', 'sleep', 'stand', 'wink', 'smile', 'surprised', 'angry', 'worried', 'laugh', 'tongue', 'kiss'];
@@ -14,7 +16,8 @@ const DEFAULT_PROMPT = [
   'Reply in the same language the user writes or speaks (Arabic or English).',
   'Your answer is read aloud: use short natural sentences, no markdown, no lists, no emoji. For long results (tables, reports) put them in a file with the tools and say where it is.',
   'Use the express tool to show an emotion or posture when it fits (do not overuse it).',
-  'Use open_item to open apps, folders or files, and get_time for the time.',
+  'You can act like a capable person at the computer: find files by name anywhere with find_files (never ask the user for a path you can find yourself), open them with open_path, read them, search the internet in the background with web_search and web_fetch, call web APIs with http_request, run commands with run_command, and remember lasting facts with remember.',
+  'Use open_item for apps (Excel, Word, My Computer...), get_time for the time, and set_reminder when asked to remind.',
   'Use the other tools (files, Excel, Word, PDF, OCR...) when they are available and the task needs them: read before you change anything, never invent data, and report what you did in one or two sentences.',
   'To work inside another program, use the screen tools: take a screenshot first, act in small steps, look at the result after each step, never guess what a button does, and stop and tell the user if something unexpected appears.',
   'Before an irreversible step in any system (submit, issue, send, pay, delete, overwrite) call confirm_with_user with a clear question.',
@@ -30,7 +33,7 @@ const CORE_TOOLS = [
   { name: 'confirm_with_user', description: 'Ask the user a yes/no question in a window and wait for the answer. Use it before irreversible steps.',
     schema: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] } },
 ];
-const toolDefs = () => [...CORE_TOOLS, ...addons.toolDefs()];
+const toolDefs = () => [...CORE_TOOLS, ...core.defs(), ...addons.toolDefs()];
 
 async function execTool(settings, name, args, { onIntent, onTool, signal } = {}) {
   if (onTool) onTool({ name, args });
@@ -41,6 +44,7 @@ async function execTool(settings, name, args, { onIntent, onTool, signal } = {})
     const r = await dialog.showMessageBox({ type: 'question', title: 'Saeed asks you', message: String(args.question || 'Continue?'), buttons: ['Yes, go ahead', 'No'], defaultId: 1, cancelId: 1, noLink: true });
     return r.response === 0 ? 'The user said yes.' : 'The user said no. Do not continue with this step.';
   }
+  if (core.has(name)) return core.run(name, args, { settings });
   return addons.invokeTool(name, args, signal);
 }
 
@@ -70,7 +74,7 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
   const recent = h.slice(-(settings.llm.maxTurns || 12) * 2).map((m) => ({ ...m }));
   while (recent.length && recent[0].role !== 'user') recent.shift();
   if (images.length && recent.length) { const last = recent[recent.length - 1]; last.text = text; last.images = images; }
-  const system = (settings.llm.systemPrompt || DEFAULT_PROMPT) + procedureText(settings, text) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
+  const system = (settings.llm.systemPrompt || DEFAULT_PROMPT) + procedureText(settings, text) + (settings.memory && settings.memory.enabled ? memory.promptText() : '') + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
   try {
     const reply = await llm.runAgent(settings, {
       system, history: recent, tools: toolDefs(), signal, onText,

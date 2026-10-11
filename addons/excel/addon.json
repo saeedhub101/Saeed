@@ -173,5 +173,7 @@
   ],
   "buildDependencies": {
     "exceljs": "^4.4.0"
-  }
+  },
+  "category": "files",
+  "bundle": "auto"
 }

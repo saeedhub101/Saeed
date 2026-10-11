@@ -151,5 +151,26 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
   return (all + ' I stopped because the task needed too many steps.').trim();
 }
 
-const runAgent = (s, opts) => (s.llm.provider === 'anthropic' ? anthropicAgent(s, opts) : openaiAgent(s, opts));
+/* ---------- brains that come from add-ons (for example a local Qwen / Llama) ---------- */
+// The add-on implements llm.complete({ system, messages, tools }) -> { text, toolCalls: [{ id, name, args }] }.
+async function addonAgent(s, { system, history, tools, execTool, signal, onText }) {
+  const addons = require('./addons');
+  const id = s.llm.provider;
+  const msgs = history.map((m) => ({ role: m.role, text: m.text, images: m.images }));
+  const defs = tools.map((t) => ({ name: t.name, description: t.description, schema: t.schema }));
+  let all = '';
+  for (let i = 0; i < maxSteps(s); i++) {
+    const r = await addons.callProvider('llm', id, { system, messages: msgs, tools: defs }, signal, onText);
+    if (r.text) all += (all ? ' ' : '') + r.text;
+    if (!r.toolCalls || !r.toolCalls.length) return all.trim();
+    msgs.push({ role: 'assistant', text: r.text || '', toolCalls: r.toolCalls });
+    for (const tc of r.toolCalls) {
+      const out = await execTool(tc.name, tc.args || {});
+      msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.name, text: rText(out) });
+    }
+  }
+  return (all + ' I stopped because the task needed too many steps.').trim();
+}
+
+const runAgent = (s, opts) => (s.llm.provider.startsWith('addon:') ? addonAgent(s, opts) : s.llm.provider === 'anthropic' ? anthropicAgent(s, opts) : openaiAgent(s, opts));
 module.exports = { runAgent };

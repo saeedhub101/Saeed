@@ -35,5 +35,7 @@
   ],
   "build": {
     "prepare": "prepare.js"
-  }
+  },
+  "category": "files",
+  "bundle": "offer"
 }

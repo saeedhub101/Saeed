@@ -20,3 +20,6 @@ body { display: block; overflow-y: auto; }
 .bar > div { height: 100%; width: 0; background: var(--accent); transition: width .15s; }
 .form { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px; }
 .empty { color: var(--muted); padding: 30px 0; text-align: center; }
+.catbtn { cursor: pointer; background: none; font: inherit; }
+.catbtn.on { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+textarea { width: 100%; background: #0f1216; color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; font: inherit; }

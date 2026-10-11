@@ -1,0 +1,18 @@
+{
+  "id": "database", "name": "Databases", "version": "1.0.0", "author": "Saeed", "category": "data", "bundle": "auto",
+  "description": "Read (and, if you allow it, change) the data of company systems directly from their database, without opening the program. Works with SQL Server, any ODBC source (MySQL, PostgreSQL, Oracle, SQLite...) and OLE DB (Access, Excel). Windows only.",
+  "main": "index.js", "permissions": ["data.read", "data.write"], "idleSeconds": 60,
+  "tools": [
+    { "name": "connections", "risk": "read", "perm": [], "description": "List the database connections that are set up (names only).", "schema": { "type": "object", "properties": {} } },
+    { "name": "tables", "risk": "read", "perm": ["data.read"], "description": "List the tables of a connection, or the columns of one table.",
+      "schema": { "type": "object", "properties": { "connection": { "type": "string" }, "table": { "type": "string" } }, "required": ["connection"] } },
+    { "name": "query", "risk": "read", "perm": ["data.read"], "description": "Run ONE read-only SELECT statement and return the rows (default 200, max 2000). Look at tables first; do not guess column names.",
+      "schema": { "type": "object", "properties": { "connection": { "type": "string" }, "sql": { "type": "string" }, "maxRows": { "type": "number" } }, "required": ["connection", "sql"] } },
+    { "name": "execute", "risk": "write", "perm": ["data.write"], "description": "Run ONE INSERT, UPDATE or DELETE statement. Always include a WHERE for UPDATE and DELETE. Tell the user what changed.",
+      "schema": { "type": "object", "properties": { "connection": { "type": "string" }, "sql": { "type": "string" } }, "required": ["connection", "sql"] } }
+  ],
+  "settings": [
+    { "key": "connections", "label": "Connections, one per line:  name | kind | connection string   (kind: sqlserver, odbc, oledb). Use {{secret:NAME}} for passwords.", "type": "text",
+      "default": "" }
+  ]
+}

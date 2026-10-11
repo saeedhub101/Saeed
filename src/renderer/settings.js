@@ -80,8 +80,10 @@ function sttSection() {
 function llmSection() {
   const c = S.llm;
   const out = h('div', { class: 'out muted' });
-  const kids = [row('Provider', SEL(c, 'provider', [['anthropic', 'Claude (Anthropic)'], ['openai', 'OpenAI'], ['custom', 'OpenAI-compatible (Ollama, Groq, OpenRouter…)']], true))];
-  if (c.provider === 'anthropic') {
+  const kids = [row('Provider', SEL(c, 'provider', [['anthropic', 'Claude (Anthropic)'], ['openai', 'OpenAI'], ['custom', 'OpenAI-compatible (Ollama, Groq, OpenRouter…)'], ...addonOpts('llm', S.llm.provider)], true))];
+  if (c.provider.startsWith('addon:')) {
+    kids.push(note('This brain runs inside an add-on (for example a local Qwen or Llama model). Its options are in the Add-ons window. Small local models are fast and private but cannot use tools as well as Claude.'), openAddons());
+  } else if (c.provider === 'anthropic') {
     const dl = h('datalist', { id: 'claude-models' }, ['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5'].map((m) => h('option', { value: m })));
     const model = T(c.anthropic, 'model'); model.setAttribute('list', 'claude-models');
     kids.push(row('Model', model, dl), keyField('anthropic', 'Anthropic key'), note('Haiku answers fastest, which feels best in voice conversation. Sonnet is smarter.'));
@@ -255,6 +257,37 @@ function proceduresSection() {
     h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => { list.push({ name: '', keywords: '', text: '' }); render(); } }, 'Add a procedure')));
 }
 
+let userSecretNames = await api.secretNames('user:');
+function webSection() {
+  const w = S.web;
+  const nameIn = h('input', { type: 'text', placeholder: 'NAME (letters, digits, _)', style: 'width:170px' });
+  const valIn = h('input', { type: 'password', class: 'grow', placeholder: 'secret value' });
+  return section('Web, search and saved secrets',
+    note('Saeed can search the internet and read pages in the background, without opening a browser. Search works with no key (DuckDuckGo); Brave or Tavily give more reliable results.'),
+    row('Search with', SEL(w, 'search', [['duckduckgo', 'DuckDuckGo (no key)'], ['brave', 'Brave Search (key)'], ['tavily', 'Tavily (key, with a short answer)']], true)),
+    w.search === 'brave' ? keyField('brave', 'Brave key') : null, w.search === 'tavily' ? keyField('tavily', 'Tavily key') : null,
+    row('Results per search', bind(w, 'maxResults', h('input', { type: 'number', min: 1, max: 10, value: w.maxResults }), Number)),
+    h('h3', {}, 'Saved secrets for web services and add-ons'),
+    note('Tokens, passwords and API keys that Saeed may use without seeing them. In a request he writes {{secret:NAME}} and the value is filled in privately. They are encrypted on this PC.'),
+    ...userSecretNames.map((n) => h('div', { class: 'row' }, h('span', { class: 'lbl' }, n.replace(/^user:/, '')), h('span', { class: 'muted grow' }, '••••••••'),
+      h('button', { class: 'x', title: 'Remove', onclick: async () => { await api.setSecret(n, ''); userSecretNames = await api.secretNames('user:'); render(); } }, '×'))),
+    h('div', { class: 'row' }, nameIn, valIn, h('button', { class: 'btn', onclick: async () => {
+      const n = nameIn.value.trim().replace(/[^A-Za-z0-9_]/g, '');
+      if (!n || !valIn.value) return toast('Give a name and a value.');
+      await api.setSecret('user:' + n, valIn.value); userSecretNames = await api.secretNames('user:'); render();
+    } }, 'Save')));
+}
+
+let facts = await api.memoryList();
+function memorySection() {
+  const inp = h('input', { type: 'text', class: 'grow', placeholder: 'Something Saeed should always know…', dir: 'auto' });
+  return section('What Saeed remembers',
+    row('Use long-term memory', C(S.memory, 'enabled')),
+    note('Saeed also remembers things by himself when you tell him a lasting preference or fact. You can add or remove them here.'),
+    ...facts.map((f, i) => h('div', { class: 'row' }, h('span', { class: 'grow', dir: 'auto' }, f), h('button', { class: 'x', onclick: async () => { await api.memoryRemove(i); facts = await api.memoryList(); render(); } }, '×'))),
+    h('div', { class: 'row' }, inp, h('button', { class: 'btn', onclick: async () => { if (inp.value.trim()) { await api.memoryAdd(inp.value); facts = await api.memoryList(); render(); } } }, 'Add')));
+}
+
 function updatesSection() {
   const u = S.updates;
   return section('Updates',
@@ -271,7 +304,7 @@ function performanceSection() {
     const m = await api.metrics();
     const total = m.processes.reduce((a, p) => a + p.memMB, 0);
     out.textContent = m.processes.map((p) => `${p.type.padEnd(10)} ${String(p.memMB).padStart(5)} MB   ${String(p.cpu).padStart(4)} % CPU`).join('\n')
-      + `\n${'total'.padEnd(10)} ${String(total).padStart(5)} MB\nadd-ons running: ${m.addons.length ? m.addons.join(', ') : 'none'}`;
+      + `\n${'total'.padEnd(10)} ${String(total).padStart(5)} MB\nwindows open: ${m.windows.join(' · ')}\nadd-ons running: ${m.addons.length ? m.addons.join(', ') : 'none'}`;
   };
   paint();
   metricsTimer = setInterval(() => { if (!document.hidden) paint(); }, 2000);
@@ -285,7 +318,7 @@ function performanceSection() {
 function render() {
   const y = window.scrollY;
   clearInterval(metricsTimer);
-  root.replaceChildren(audioSection(), sttSection(), llmSection(), ttsSection(), realtimeSection(), prayerSection(), launcherSection(), agentSection(), proceduresSection(), updatesSection(), performanceSection());
+  root.replaceChildren(audioSection(), sttSection(), llmSection(), ttsSection(), realtimeSection(), prayerSection(), launcherSection(), agentSection(), webSection(), memorySection(), proceduresSection(), updatesSection(), performanceSection());
   window.scrollTo(0, y);
 }
 render();

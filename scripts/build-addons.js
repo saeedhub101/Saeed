@@ -17,7 +17,9 @@ const pub = (pkg.build && pkg.build.publish && pkg.build.publish[0]) || {};
 const repo = process.env.SAEED_REPO || (pub.owner && pub.repo ? `${pub.owner}/${pub.repo}` : 'OWNER/REPO');
 const tag = process.env.ADDONS_TAG || 'addons';
 
+const lib = path.join(root, 'build', 'addons-lib');
 (async () => {
+  if (process.env.SKIP_ADDONS && fs.existsSync(path.join(lib, 'index.json'))) { console.log('SKIP_ADDONS is set: keeping the existing build/addons-lib'); return; }
   fs.rmSync(out, { recursive: true, force: true });
   fs.mkdirSync(path.join(out, '.stage'), { recursive: true });
   const entries = [];
@@ -43,7 +45,7 @@ const tag = process.env.ADDONS_TAG || 'addons';
     zip.writeZip(path.join(out, file));
     const buf = fs.readFileSync(path.join(out, file));
     entries.push({
-      id, name: m.name, version: m.version, description: m.description, author: m.author, permissions: m.permissions || [],
+      id, name: m.name, version: m.version, description: m.description, author: m.author, permissions: m.permissions || [], category: m.category || 'other', bundle: m.bundle || 'none', file,
       size: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'),
       url: `https://github.com/${repo}/releases/download/${tag}/${file}`,
     });
@@ -53,5 +55,13 @@ const tag = process.env.ADDONS_TAG || 'addons';
   const json = JSON.stringify({ addons: entries }, null, 2);
   fs.writeFileSync(path.join(out, 'registry.json'), json);
   fs.writeFileSync(path.join(src, 'registry.json'), json);
+  // The add-ons marked "auto" or "offer" travel inside the installer (resources/addons-lib), so the library is never empty.
+  fs.rmSync(lib, { recursive: true, force: true });
+  fs.mkdirSync(lib, { recursive: true });
+  // Big or optional add-ons (offline Whisper, local brain, voices) are listed with their download link but not packed in.
+  const inApp = entries.filter((e) => e.bundle === 'auto' || e.bundle === 'offer');
+  for (const e of inApp) fs.copyFileSync(path.join(out, e.file), path.join(lib, e.file));
+  fs.writeFileSync(path.join(lib, 'index.json'), JSON.stringify({ addons: entries.map((e) => ({ ...e, inApp: inApp.includes(e) })) }, null, 2));
+  console.log(`Bundled in the installer: ${inApp.map((e) => e.id).join(', ')}\nListed with a download link: ${entries.filter((e) => !inApp.includes(e)).map((e) => e.id).join(', ')}`);
   console.log(`\nDone. Upload dist-addons/*.zip to the "${tag}" release of ${repo}, then commit addons/registry.json.`);
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -734,6 +734,7 @@ let last = performance.now();
 (function loop(now) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (document.hidden) return;                      // minimised: draw nothing
   if (tab === 'fix') tickMotion(fx, true, dt); else if (tab === 'create') tickMotion(cr, false, dt);
   ch.update(dt);
   if (markTarget) { markTarget.getWorldPosition(marker.position); marker.visible = true; } else marker.visible = false;

@@ -3,13 +3,15 @@ const api = window.api;
 const root = document.getElementById('root');
 let creating = false;
 const packSpec = { name: '', kind: 'attach', file: '', bone: 'head', slot: 'top', hide: '' };
-let tab = 'installed', installed = await api.addonsList(), store = null, storeErr = '';
+let tab = 'installed', installed = await api.addonsList(), store = null, storeErr = '', storeNotes = [], cat = 'all', showSources = false, linkOpen = false;
+const CATS = [['all', 'All'], ['files', 'Files and Office'], ['web', 'Web and browser'], ['data', 'Data'], ['voice', 'Voice'], ['brain', 'Brains'], ['look', 'Look'], ['other', 'Other']];
 const bars = {};
 
 for (const b of document.querySelectorAll('#tabs2 button')) {
   b.onclick = () => { tab = b.dataset.t; for (const x of document.querySelectorAll('#tabs2 button')) x.classList.toggle('on', x === b); if (tab === 'store' && !store) loadStore(); render(); };
 }
 document.getElementById('pack').onclick = () => { tab = 'installed'; creating = !creating; for (const x of document.querySelectorAll('#tabs2 button')) x.classList.toggle('on', x.dataset.t === 'installed'); render(); };
+document.getElementById('link').onclick = () => { tab = 'store'; linkOpen = !linkOpen; for (const x of document.querySelectorAll('#tabs2 button')) x.classList.toggle('on', x.dataset.t === 'store'); if (!store) loadStore(); render(); };
 document.getElementById('zip').onclick = async () => {
   const r = await api.addonsInstallZip();
   if (r.ok) toast(`${r.addon} installed.`); else if (r.error !== 'Cancelled.') toast(r.error);
@@ -23,9 +25,9 @@ api.onAddonsProgress((p) => {
 });
 
 async function loadStore() {
-  storeErr = ''; store = null; render();
+  storeErr = ''; storeNotes = []; store = null; render();
   const r = await api.addonsRegistry();
-  if (r.ok) store = r.list; else storeErr = r.error;
+  if (r.ok) { store = r.list; storeNotes = r.errors || []; } else storeErr = r.error;
   render();
 }
 function markStore() {
@@ -70,7 +72,7 @@ function storeCard(e) {
   const b = h('div', { class: 'bar', hidden: true }, h('div', {}));
   const t = h('div', { class: 'meta' });
   bars[e.id] = { bar: b.firstChild, text: t };
-  const label = e.update ? `Update to ${e.version}` : e.installed ? 'Installed' : 'Install';
+  const label = e.update ? `Update to ${e.version}` : e.installed ? 'Installed' : e.source === 'included' ? 'Add' : 'Install';
   const go = h('button', { class: 'btn' + (e.installed && !e.update ? '' : ' primary'), disabled: e.installed && !e.update, onclick: async () => {
     go.disabled = true; b.hidden = false; t.textContent = 'starting…';
     const r = await api.addonsInstall(e);
@@ -78,7 +80,7 @@ function storeCard(e) {
     if (r.ok) toast(`${e.name} installed.`); else { go.disabled = false; if (r.error !== 'Cancelled.') toast(r.error); }
   } }, label);
   return h('div', { class: 'card' },
-    h('div', { class: 'top' }, h('div', { class: 'grow' }, h('h4', {}, e.name, ' ', h('span', { class: 'meta' }, `v${e.version}${e.author ? ' · ' + e.author : ''}${e.size ? ' · ' + fmtBytes(e.size) : ''}`)), h('div', { class: 'meta' }, e.description)), go),
+    h('div', { class: 'top' }, h('div', { class: 'grow' }, h('h4', {}, e.name, ' ', h('span', { class: 'meta' }, `v${e.version}${e.author ? ' · ' + e.author : ''}${e.size ? ' · ' + fmtBytes(e.size) : ''}${e.source === 'included' ? ' · included with Saeed' : ''}`)), h('div', { class: 'meta' }, e.description)), go),
     h('div', { class: 'chips' }, (e.permissions || []).map(chip)), b, t);
 }
 
@@ -105,16 +107,44 @@ function packCard() {
       h('button', { class: 'btn', onclick: () => { creating = false; render(); } }, 'Cancel')));
 }
 
+function linkCard() {
+  const url = h('input', { type: 'text', class: 'grow', placeholder: 'https://…/addon.zip   or   https://…/clothes.glb' });
+  const bar = h('div', { class: 'bar', hidden: true }, h('div', {})), txt = h('div', { class: 'meta' });
+  bars.link = { bar: bar.firstChild, text: txt };
+  return h('div', { class: 'card' }, h('h4', {}, 'Install from a link'),
+    h('div', { class: 'meta' }, 'Paste a direct link to an add-on (.zip) from any website, or to a 3D file (.glb) for an accessory or outfit. Only use links you trust.'),
+    h('div', { class: 'row' }, url, h('button', { class: 'btn primary', onclick: async () => {
+      bar.hidden = false; txt.textContent = 'downloading…';
+      const r = await api.addonsInstallUrl(url.value.trim());
+      bar.hidden = true; txt.textContent = '';
+      if (!r.ok) { if (r.error !== 'Cancelled.') toast(r.error); return; }
+      if (r.glb) { packSpec.file = r.glb; packSpec.name = packSpec.name || 'New item'; creating = true; tab = 'installed'; linkOpen = false; for (const x of document.querySelectorAll('#tabs2 button')) x.classList.toggle('on', x.dataset.t === 'installed'); render(); toast('Downloaded. Choose how to use it.'); }
+      else { toast(`${r.addon} installed.`); linkOpen = false; render(); }
+    } }, 'Download')), bar, txt);
+}
+function sourcesCard() {
+  const list = [];
+  return h('div', { class: 'card' }, h('h4', {}, 'Sources of add-ons'),
+    h('div', { class: 'meta' }, 'Each source is a link to a registry.json. Saeed always shows the add-ons included with the app, plus your GitHub repository (Settings → Updates) and these extra sources.'),
+    h('textarea', { rows: 4, class: 'grow', placeholder: 'My company | https://example.com/addons/registry.json', oninput: (e) => { list.length = 0; for (const line of e.target.value.split('\n')) { const [a, b] = line.includes('|') ? line.split('|') : ['', line]; if (b && b.trim()) list.push({ name: a.trim(), url: b.trim() }); } } }),
+    h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: async () => { await api.addonsSetSources(list); toast('Sources saved.'); loadStore(); } }, 'Save sources')));
+}
+
 function render() {
   const y = window.scrollY;
   if (tab === 'installed') {
     root.replaceChildren(...(creating ? [packCard()] : []), ...(installed.length ? installed.map(installedCard) : [h('div', { class: 'empty' }, 'No add-ons installed yet. Open the Store tab, or install one from a file.')]));
   } else {
+    const shown = store ? store.filter((e) => cat === 'all' || e.category === cat) : [];
     root.replaceChildren(
-      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: loadStore }, 'Refresh list')),
+      linkOpen ? linkCard() : null,
+      showSources ? sourcesCard() : null,
+      h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: loadStore }, 'Refresh list'), h('button', { class: 'btn', onclick: () => { showSources = !showSources; render(); } }, 'Sources…')),
+      h('div', { class: 'chips' }, CATS.map(([id, label]) => h('button', { class: 'chip catbtn' + (cat === id ? ' on' : ''), onclick: () => { cat = id; render(); } }, label))),
       storeErr ? h('p', { class: 'warn' }, storeErr) : null,
+      ...storeNotes.map((n) => h('p', { class: 'meta' }, 'Could not read a source: ' + n)),
       !store && !storeErr ? h('div', { class: 'empty' }, 'Loading the list…') : null,
-      ...(store ? (store.length ? store.map(storeCard) : [h('div', { class: 'empty' }, 'The list is empty.')]) : []));
+      ...(store ? (shown.length ? shown.map(storeCard) : [h('div', { class: 'empty' }, 'Nothing in this category.')]) : []));
   }
   window.scrollTo(0, y);
 }

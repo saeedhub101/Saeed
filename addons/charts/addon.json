@@ -1,30 +1,273 @@
 {
-  "id": "charts", "name": "Charts and drawings", "version": "1.0.0", "author": "Saeed",
+  "id": "charts",
+  "name": "Charts and drawings",
+  "version": "1.0.0",
+  "author": "Saeed",
   "description": "Draw curves (for example pump head-flow curves with the duty point), choose a pump from its curves, and draw a vertical section of a well installation. Saves SVG, or PNG when possible.",
-  "main": "index.js", "permissions": ["files:write"], "idleSeconds": 60,
+  "main": "index.js",
+  "permissions": [
+    "files:write"
+  ],
+  "idleSeconds": 60,
   "tools": [
-    { "name": "plot", "risk": "write", "perm": ["files.write"],
+    {
+      "name": "plot",
+      "risk": "write",
+      "perm": [
+        "files.write"
+      ],
       "description": "Draw an X-Y chart and save it as .svg or .png. series: [{name, points:[[x,y],...], smooth?:'none'|'spline'|'poly2'|'poly3', axis?:'left'|'right', style?:'line'|'points'}]. markers: [{x,y,label}] such as the duty point. Use axis:'right' for a second scale (efficiency, power).",
-      "schema": { "type": "object", "properties": {
-        "path": { "type": "string" }, "title": { "type": "string" }, "xLabel": { "type": "string" }, "yLabel": { "type": "string" }, "yRightLabel": { "type": "string" },
-        "series": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "points": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "smooth": { "type": "string" }, "axis": { "type": "string" }, "style": { "type": "string" } }, "required": ["name", "points"] } },
-        "markers": { "type": "array", "items": { "type": "object", "properties": { "x": { "type": "number" }, "y": { "type": "number" }, "label": { "type": "string" } }, "required": ["x", "y"] } },
-        "xMin": { "type": "number" }, "xMax": { "type": "number" }, "yMin": { "type": "number" }, "yMax": { "type": "number" } }, "required": ["path", "series"] } },
-    { "name": "system_curve", "risk": "read", "perm": [],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "xLabel": {
+            "type": "string"
+          },
+          "yLabel": {
+            "type": "string"
+          },
+          "yRightLabel": {
+            "type": "string"
+          },
+          "series": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "points": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "smooth": {
+                  "type": "string"
+                },
+                "axis": {
+                  "type": "string"
+                },
+                "style": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "points"
+              ]
+            }
+          },
+          "markers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ]
+            }
+          },
+          "xMin": {
+            "type": "number"
+          },
+          "xMax": {
+            "type": "number"
+          },
+          "yMin": {
+            "type": "number"
+          },
+          "yMax": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "path",
+          "series"
+        ]
+      }
+    },
+    {
+      "name": "system_curve",
+      "risk": "read",
+      "perm": [],
       "description": "Make the points of a system curve H = static + k*Q^2 that passes through the duty point (flow, head). Returns points to pass to plot.",
-      "schema": { "type": "object", "properties": { "flow": { "type": "number" }, "head": { "type": "number" }, "staticHead": { "type": "number" }, "maxFlow": { "type": "number" } }, "required": ["flow", "head"] } },
-    { "name": "pump_select", "risk": "read", "perm": [],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "flow": {
+            "type": "number"
+          },
+          "head": {
+            "type": "number"
+          },
+          "staticHead": {
+            "type": "number"
+          },
+          "maxFlow": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "flow",
+          "head"
+        ]
+      }
+    },
+    {
+      "name": "pump_select",
+      "risk": "read",
+      "perm": [],
       "description": "Choose pumps for a duty point. pumps: [{model, curve:[[Q,H],...], efficiency?:[[Q,percent],...], bepFlow?}]. A pump qualifies when its head at the duty flow is at least the required head (and not more than maxExcessPercent above it). Returns a ranked table (closest to the duty first).",
-      "schema": { "type": "object", "properties": {
-        "flow": { "type": "number" }, "head": { "type": "number" }, "maxExcessPercent": { "type": "number" }, "method": { "type": "string", "enum": ["linear", "poly3"] },
-        "pumps": { "type": "array", "items": { "type": "object", "properties": { "model": { "type": "string" }, "curve": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "efficiency": { "type": "array", "items": { "type": "array", "items": { "type": "number" } } }, "bepFlow": { "type": "number" } }, "required": ["model", "curve"] } } }, "required": ["flow", "head", "pumps"] } },
-    { "name": "well_section", "risk": "write", "perm": ["files.write"],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "flow": {
+            "type": "number"
+          },
+          "head": {
+            "type": "number"
+          },
+          "maxExcessPercent": {
+            "type": "number"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "linear",
+              "poly3"
+            ]
+          },
+          "pumps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "curve": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "efficiency": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "number"
+                    }
+                  }
+                },
+                "bepFlow": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "model",
+                "curve"
+              ]
+            }
+          }
+        },
+        "required": [
+          "flow",
+          "head",
+          "pumps"
+        ]
+      }
+    },
+    {
+      "name": "well_section",
+      "risk": "write",
+      "perm": [
+        "files.write"
+      ],
       "description": "Draw a vertical section of a well / borehole pump installation with dimensions (all depths in metres from ground level) and save it as .svg or .png.",
-      "schema": { "type": "object", "properties": {
-        "path": { "type": "string" }, "title": { "type": "string" }, "language": { "type": "string", "enum": ["en", "ar"] },
-        "wellDepth": { "type": "number" }, "casingDiameterMm": { "type": "number" }, "staticLevel": { "type": "number" }, "pumpingLevel": { "type": "number" },
-        "pumpDepth": { "type": "number", "description": "Depth of the pump inlet." }, "pumpLength": { "type": "number" }, "riserDiameterMm": { "type": "number" },
-        "dischargeHeight": { "type": "number", "description": "Height of the discharge above ground." }, "screenFrom": { "type": "number" }, "screenTo": { "type": "number" } },
-        "required": ["path", "wellDepth", "staticLevel", "pumpDepth"] } }
-  ]
+      "schema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "ar"
+            ]
+          },
+          "wellDepth": {
+            "type": "number"
+          },
+          "casingDiameterMm": {
+            "type": "number"
+          },
+          "staticLevel": {
+            "type": "number"
+          },
+          "pumpingLevel": {
+            "type": "number"
+          },
+          "pumpDepth": {
+            "type": "number",
+            "description": "Depth of the pump inlet."
+          },
+          "pumpLength": {
+            "type": "number"
+          },
+          "riserDiameterMm": {
+            "type": "number"
+          },
+          "dischargeHeight": {
+            "type": "number",
+            "description": "Height of the discharge above ground."
+          },
+          "screenFrom": {
+            "type": "number"
+          },
+          "screenTo": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "path",
+          "wellDepth",
+          "staticLevel",
+          "pumpDepth"
+        ]
+      }
+    }
+  ],
+  "category": "data",
+  "bundle": "auto"
 }

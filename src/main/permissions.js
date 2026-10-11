@@ -15,6 +15,11 @@ const CAPS = {
   'system.run': { label: 'Run commands and scripts', desc: 'Run programs and scripts on this PC (for add-ons that need it).' },
   'desktop.control': { label: 'See the screen and control mouse and keyboard', desc: 'Operate other programs on screen (for add-ons that do it).' },
   'network': { label: 'Use the internet from add-ons', desc: 'Send or fetch data over the internet from inside an add-on.' },
+  'web.read': { label: 'Search and read the web', desc: 'Search the internet and read web pages in the background.' },
+  'web.send': { label: 'Send data to web services', desc: 'Requests that change something online (POST, PUT, DELETE) and downloads to disk.' },
+  'browser.control': { label: 'Control a web browser', desc: 'Open a real browser (visible or hidden), log in, fill forms and click.' },
+  'data.read': { label: 'Read company databases', desc: 'Run read-only queries on the databases you connected.' },
+  'data.write': { label: 'Change company databases', desc: 'Insert, update or delete rows in the databases you connected.' },
 };
 const ACTION_CAP = { read: 'files.read', write: 'files.write', delete: 'files.delete', 'delete-permanent': 'files.deletePermanent' };
 const DELETE_CAPS = new Set(['files.delete', 'files.deletePermanent']);

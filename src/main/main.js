@@ -12,6 +12,7 @@ const brain = require('./brain');
 const pipeline = require('./pipeline');
 const prayer = require('./prayer');
 const perms = require('./permissions');
+const memory = require('./memory');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 app.setAppUserModelId('com.avataragent.app');
@@ -333,7 +334,14 @@ ipcMain.handle('addons:toggle', (_e, id, on) => { setSetting((s) => { s.addons.e
 ipcMain.handle('addons:remove', (_e, id) => { addons.remove(id); return true; });
 ipcMain.handle('addons:stop', (_e, id) => { addons.stop(id); return true; });
 ipcMain.handle('addons:save-settings', (_e, id, values) => { setSetting((s) => { s.addons.settings[id] = values; }); return true; });
-ipcMain.handle('addons:registry', async () => { try { return { ok: true, list: await addons.registry() }; } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('addons:registry', async () => { try { const r = await addons.registry(); return { ok: true, list: r.list, errors: r.errors }; } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('addons:set-sources', (_e, list) => { setSetting((s) => { s.addons.sources = (list || []).filter((x) => x && /^https?:\/\//i.test(String(x.url || '').trim())).map((x) => ({ name: String(x.name || '').slice(0, 40), url: String(x.url).trim() })); }); return true; });
+ipcMain.handle('addons:install-url', async (_e, url) => {
+  try {
+    if (!/\.glb(\?|#|$)/i.test(String(url)) && !(await askInstall(String(url).slice(0, 80), '', ['unknown: check the source'].slice(0, 0)))) return { ok: false, error: 'Cancelled.' };
+    return { ok: true, ...(await addons.installUrl(url, (p) => sendTo('addons', 'addons:progress', { ...p, id: 'link' }))) };
+  } catch (e) { return { ok: false, error: e.message }; }
+});
 async function askInstall(name, version, perms) {
   const r = await dialog.showMessageBox(wins.addons && !wins.addons.isDestroyed() ? wins.addons : undefined, {
     type: 'warning', buttons: ['Install', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true,
@@ -345,7 +353,8 @@ async function askInstall(name, version, perms) {
 ipcMain.handle('addons:install', async (_e, entry) => {
   try {
     if (!(await askInstall(entry.name, entry.version, entry.permissions))) return { ok: false, error: 'Cancelled.' };
-    await addons.download(entry, (p) => sendTo('addons', 'addons:progress', p));
+    if (entry.source === 'included') addons.installBundled(entry.id);
+    else await addons.download(entry, (p) => sendTo('addons', 'addons:progress', p));
     return { ok: true };
   } catch (e) { return { ok: false, error: e.message }; }
 });
@@ -382,11 +391,16 @@ ipcMain.on('update:action', (_e, a) => {
 ipcMain.handle('sys:metrics', () => ({
   processes: app.getAppMetrics().map((m) => ({ pid: m.pid, type: m.type, memMB: Math.round((m.memory.workingSetSize || 0) / 1024), cpu: +m.cpu.percentCPUUsage.toFixed(1) })),
   addons: addons.running(),
+  windows: BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed()).map((w) => `${w.getTitle() || 'window'}${w.isVisible() ? '' : ' (hidden)'}`),
 }));
 
 // settings helpers
 ipcMain.handle('secret:set', (_e, name, value) => { secrets.set(name, value); return true; });
 ipcMain.handle('secret:has', (_e, name) => secrets.has(name));
+ipcMain.handle('secret:names', (_e, prefix) => secrets.names(prefix));
+ipcMain.handle('memory:list', () => memory.listFacts());
+ipcMain.handle('memory:add', (_e, t) => memory.addFact(t));
+ipcMain.handle('memory:remove', (_e, i) => { memory.removeFactAt(i); return true; });
 ipcMain.handle('test:tts', async (_e, text) => {
   try { const a = await providers.synthesize(cfg.settings, text); return { ok: true, mime: a.mime, bytes: a.bytes }; }
   catch (e) { return { ok: false, error: e.message }; }
@@ -416,6 +430,7 @@ app.whenReady().then(() => {
   createAvatar();
   buildTray();
   prayer.start({ getSettings: () => cfg.settings, onAdhan: triggerAdhan, onUpdate: buildTray });
+  memory.initReminders((r) => { if (cfg.visible) pipeline.say((/[\u0600-\u06FF]/.test(r.text) ? 'تذكير: ' : 'Reminder: ') + r.text); });
   perms.init({ getSettings: () => cfg.settings, setSetting, notify: (t) => { bus.chat({ type: 'state', text: t }); bus.avatar({ type: 'notice', text: t }); } });
   addons.init({
     getSettings: () => cfg.settings, setSetting,

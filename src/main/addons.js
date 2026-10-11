@@ -3,6 +3,7 @@
 // Each add-on runs in its own utility process that is started on the first call and stopped when idle.
 const { app, utilityProcess, shell } = require('electron');
 const perms = require('./permissions');
+const secrets = require('./secrets');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -13,7 +14,7 @@ const ID_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
 let ctx = null, list = [];
 const procs = new Map();
 
-function init(c) { ctx = c; fs.mkdirSync(dir(), { recursive: true }); scan(); }
+function init(c) { ctx = c; fs.mkdirSync(dir(), { recursive: true }); scan(); setTimeout(firstRun, 4000); }
 
 function scan() {
   list = [];
@@ -37,18 +38,21 @@ const settingsOf = (a) => {
 const find = (id) => list.find((a) => a.id === id);
 
 /* ---------- process lifecycle ---------- */
-function send(p, msg) {
+function send(p, msg, onStream) {
   const id = ++p.seq;
-  return new Promise((resolve, reject) => { p.pending.set(id, { resolve, reject }); p.child.postMessage({ ...msg, id }); });
+  if (onStream) p.streams.set(id, onStream);
+  return new Promise((resolve, reject) => { p.pending.set(id, { resolve, reject }); p.child.postMessage({ ...msg, id }); })
+    .finally(() => p.streams.delete(id));
 }
 function start(a) {
   let p = procs.get(a.id);
   if (p) return p;
   const hostPath = path.join(__dirname, 'addon-host.js').replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
   const child = utilityProcess.fork(hostPath, [], { serviceName: `saeed-${a.id}`, stdio: 'pipe' });
-  p = { child, pending: new Map(), seq: 0, timer: null, since: Date.now() };
+  p = { child, pending: new Map(), streams: new Map(), seq: 0, timer: null, since: Date.now() };
   child.on('message', (m) => {
-    if (m.type === 'access' || m.type === 'trash' || m.type === 'permit') { hostRequest(a, child, m); return; }
+    if (m.type === 'access' || m.type === 'trash' || m.type === 'permit' || m.type === 'secret') { hostRequest(a, child, m); return; }
+    if (m.type === 'stream') { const cb = p.streams.get(m.callId); if (cb) cb(m.text); return; }
     if (m.type === 'status') { if (ctx.onStatus) ctx.onStatus(a.id, m.text); return; }
     const r = p.pending.get(m.id);
     if (!r) return;
@@ -76,7 +80,7 @@ function armIdle(a, p) {
   p.timer = setTimeout(() => { if (p.pending.size) armIdle(a, p); else stop(a.id); }, secs * 1000);
 }
 
-async function call(a, target, name, args, signal) {
+async function call(a, target, name, args, signal, onStream) {
   if (!isEnabled(a.id)) throw new Error(`The add-on "${a.name}" is turned off.`);
   const p = start(a);
   clearTimeout(p.timer);
@@ -86,7 +90,7 @@ async function call(a, target, name, args, signal) {
     await p.ready;
     const env = { denyPaths: perms.denyList(), settings: settingsOf(a) };
     return await Promise.race([
-      send(p, { type: 'call', target, name, args, env }),
+      send(p, { type: 'call', target, name, args, env }, onStream),
       new Promise((_, rej) => setTimeout(() => rej(new Error('The add-on took too long (5 minutes).')), 300000)),
     ]);
   } finally {
@@ -115,7 +119,11 @@ async function hostRequest(a, child, m) {
   const reply = (ok, v) => { try { child.postMessage({ type: 'reply', rid: m.rid, ok, ...(ok ? { result: v } : { error: v }) }); } catch { /* process gone */ } };
   try {
     if (m.type === 'access') reply(true, await perms.access({ addon: a.id, addonName: a.name, path: m.path, action: m.action, detail: m.detail }));
-    else if (m.type === 'trash') {
+    else if (m.type === 'secret') {
+      const v = secrets.get('user:' + String(m.name).replace(/^user:/, ''));
+      perms.auditEvent({ addon: a.id, cap: 'secret', path: String(m.name), detail: v ? 'read' : 'missing' });
+      reply(true, v);
+    } else if (m.type === 'trash') {
       const real = await perms.access({ addon: a.id, addonName: a.name, path: m.path, action: 'delete', detail: 'Move to the Recycle Bin' });
       await shell.trashItem(real);
       reply(true, real);
@@ -149,10 +157,10 @@ async function invokeTool(fullName, args, signal) {
 /* ---------- providers (STT / TTS) ---------- */
 const providersOf = (kind) => list.filter((a) => isEnabled(a.id) && a.provides && a.provides[kind])
   .map((a) => ({ id: `addon:${a.id}`, label: `${a.provides[kind].label || a.name} (add-on)` }));
-async function callProvider(kind, providerId, args, signal) {
+async function callProvider(kind, providerId, args, signal, onStream) {
   const a = find(String(providerId).replace(/^addon:/, ''));
   if (!a) throw new Error('This provider add-on is not installed. Open Add-ons to install it.');
-  return call(a, kind, '', args, signal);
+  return call(a, kind, '', args, signal, onStream);
 }
 
 /* ---------- accessories ---------- */
@@ -205,6 +213,7 @@ function installZip(zipPath) {
   fs.renameSync(staging, target);
   scan();
   if (ctx.onChange) ctx.onChange();
+  if (ctx.getSettings().addons.removed.includes(m.id)) ctx.setSetting((s) => { s.addons.removed = s.addons.removed.filter((x) => x !== m.id); });
   return m;
 }
 
@@ -232,6 +241,7 @@ async function download(entry, onProgress) {
 
 function remove(id) {
   stop(id);
+  ctx.setSetting((s) => { if (!s.addons.removed.includes(id)) s.addons.removed.push(id); });
   fs.rmSync(path.join(dir(), id), { recursive: true, force: true });
   scan();
   if (ctx.onChange) ctx.onChange();
@@ -242,16 +252,50 @@ function registryUrl() {
   if (s.addons.registryUrl) return s.addons.registryUrl;
   return s.updates.repo ? `https://raw.githubusercontent.com/${s.updates.repo}/main/addons/registry.json` : '';
 }
-async function registry() {
-  const url = registryUrl();
-  if (!url) throw new Error('Set your GitHub repository in Settings → Updates (or a registry address here).');
+const cacheReg = new Map();
+async function readRegistry(url) {
   const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
-  if (!r.ok) throw new Error('Could not read the add-on list: ' + r.status);
-  const j = await r.json();
-  return (j.addons || []).map((e) => {
+  if (!r.ok) throw new Error(`${url}: ${r.status}`);
+  return ((await r.json()).addons || []).map((e) => ({ ...e, source: url }));
+}
+// Included library + every online source (your repository, extra sources). Returns { list, errors }.
+async function registry() {
+  const s = ctx.getSettings();
+  const urls = [...new Set([registryUrl(), ...(s.addons.sources || []).map((x) => x.url)].filter(Boolean))];
+  const errors = [];
+  const online = (await Promise.all(urls.map((u) => readRegistry(u).then((x) => { cacheReg.set(u, x); return x; }).catch((e) => { errors.push(e.message); return cacheReg.get(u) || []; })))).flat();
+  const byId = new Map();
+  for (const e of bundled().map((x) => ({ ...x, source: x.inApp ? 'included' : 'catalog' }))) byId.set(e.id, e);
+  for (const e of online) { const cur = byId.get(e.id); if (!cur || cmp(e.version, cur.version) > 0) byId.set(e.id, e); }
+  const out = [...byId.values()].map((e) => {
     const inst = find(e.id);
-    return { ...e, installed: !!inst, installedVersion: inst ? inst.version : null, update: !!inst && cmp(e.version, inst.version) > 0 };
+    return { ...e, category: e.category || 'other', installed: !!inst, installedVersion: inst ? inst.version : null, update: !!inst && cmp(e.version, inst.version) > 0 };
   });
+  return { list: out, errors };
+}
+
+/* ---------- the library that ships with Saeed ---------- */
+// build-addons packs the add-ons into resources/addons-lib; "auto" ones are installed on first run, "offer" ones appear in the Store.
+const libDir = () => (app.isPackaged ? path.join(process.resourcesPath, 'addons-lib') : path.join(app.getAppPath(), 'build', 'addons-lib'));
+function bundled() {
+  try { return JSON.parse(fs.readFileSync(path.join(libDir(), 'index.json'), 'utf8')).addons || []; } catch { return []; }
+}
+function installBundled(id) {
+  const e = bundled().find((x) => x.id === id && x.inApp);
+  if (!e) throw new Error('This add-on is not packed in the installer. Download it from the Store.');
+  return installZip(path.join(libDir(), e.file));
+}
+// First run and updates: install or upgrade the add-ons marked "auto", one at a time so the app stays responsive.
+function firstRun() {
+  const todo = bundled().filter((e) => e.inApp && e.bundle === 'auto' && !ctx.getSettings().addons.removed.includes(e.id)
+    && (!find(e.id) || cmp(e.version, find(e.id).version) > 0));
+  const next = () => {
+    const e = todo.shift();
+    if (!e) return;
+    try { installBundled(e.id); } catch (err) { console.error('[addons] could not install', e.id, err.message); }
+    setTimeout(next, 200);
+  };
+  next();
 }
 
 /* ---------- accessory packs made from the user's own GLB files ---------- */
@@ -278,9 +322,9 @@ function summary() {
   return list.map((a) => ({
     id: a.id, name: a.name, version: a.version, description: a.description, author: a.author, permissions: a.permissions || [],
     enabled: isEnabled(a.id), running: procs.has(a.id), tools: (a.tools || []).map((t) => ({ name: t.name, risk: t.risk || 'read' })),
-    provides: a.provides || {}, settingsDef: a.settings || [], settings: settingsOf(a), accessories: (a.accessories || []).length,
+    provides: a.provides || {}, settingsDef: a.settings || [], settings: settingsOf(a), accessories: (a.accessories || []).length, category: a.category || 'other',
   }));
 }
 const running = () => [...procs.keys()];
 
-module.exports = { createPack, init, scan, summary, toolDefs, invokeTool, providersOf, callProvider, accessories, readAddonFile, installZip, download, remove, registry, stop, stopAll, running };
+module.exports = { installBundled, installUrl, createPack, init, scan, summary, toolDefs, invokeTool, providersOf, callProvider, accessories, readAddonFile, installZip, download, remove, registry, stop, stopAll, running };

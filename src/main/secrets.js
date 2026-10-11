@@ -24,4 +24,5 @@ function get(name) {
   try { return x.e ? safeStorage.decryptString(Buffer.from(x.v, 'base64')) : Buffer.from(x.v, 'base64').toString(); } catch { return ''; }
 }
 const has = (name) => !!load()[name];
-module.exports = { set, get, has };
+const names = (prefix) => Object.keys(load()).filter((k) => k.startsWith(prefix));
+module.exports = { set, get, has, names };

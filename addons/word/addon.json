@@ -88,5 +88,7 @@
         "files.write"
       ]
     }
-  ]
+  ],
+  "category": "files",
+  "bundle": "auto"
 }

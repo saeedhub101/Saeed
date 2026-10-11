@@ -130,8 +130,80 @@ function buildAct(steps, o) {
   return L.join('\n');
 }
 
+
+/* ---------- UI Automation: work with the controls of a program without looking at the screen ---------- */
+const UIA = `Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$AE = [System.Windows.Automation.AutomationElement]
+$TS = [System.Windows.Automation.TreeScope]
+function Find-Win($title) {
+  if (-not $title) { return $AE::FromHandle([W]::GetForegroundWindow()) }
+  foreach ($w in $AE::RootElement.FindAll($TS::Children, [System.Windows.Automation.Condition]::TrueCondition)) { if ($w.Current.Name -like "*$title*") { return $w } }
+  throw "Window not found: $title"
+}
+function Check-Win($w) { $n = $w.Current.Name.ToLower(); foreach ($p in $blocked) { if ($p -and $n.Contains($p.ToLower())) { throw "Blocked window: $($w.Current.Name)" } } }
+function Find-Control($win, $name, $aid) {
+  $conds = @()
+  if ($name) { $conds += New-Object System.Windows.Automation.PropertyCondition($AE::NameProperty, $name) }
+  if ($aid) { $conds += New-Object System.Windows.Automation.PropertyCondition($AE::AutomationIdProperty, $aid) }
+  if ($conds.Count -eq 0) { throw 'Give a name or an automationId.' }
+  $cond = if ($conds.Count -gt 1) { New-Object System.Windows.Automation.AndCondition($conds) } else { $conds[0] }
+  $el = $win.FindFirst($TS::Descendants, $cond)
+  if (-not $el -and $name) { foreach ($c in $win.FindAll($TS::Descendants, [System.Windows.Automation.Condition]::TrueCondition)) { if ($c.Current.Name -like "*$name*") { $el = $c; break } } }
+  if (-not $el) { throw 'Control not found. Use ui_tree to see the names.' }
+  return $el
+}
+function Get-Val($el) {
+  try { return $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).Current.Value } catch {}
+  try { return $el.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern).DocumentRange.GetText(4000) } catch {}
+  return $null
+}
+`;
+const uiaRun = (settings, body) => runPs(`${PRELUDE}\n$blocked = @(${list(settings.blocked).map(q).join(',')})\n${UIA}\n${body}`, 60000);
+const b64 = (t) => Buffer.from(String(t ?? ''), 'utf8').toString('base64');
+const decl = (v, t) => `$${v} = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(t)}'))`;
+const target = (a) => `${decl('title', a.window)}\n${decl('name', a.name)}\n${decl('aid', a.automationId)}\n$win = Find-Win $title\nCheck-Win $win\n`;
+
+const uiaTools = {
+  async ui_tree(a, ctx) {
+    const depth = Math.max(1, Math.min(6, Number(a.depth) || 3));
+    return uiaRun(ctx.settings, `${decl('title', a.window)}
+$win = Find-Win $title
+Check-Win $win
+$script:out = @(); $script:n = 0
+function Walk($el, $d) {
+  if ($script:n -ge 250) { return }
+  $script:n++
+  $c = $el.Current
+  $script:out += [pscustomobject]@{ d = $d; type = $c.ControlType.ProgrammaticName.Replace('ControlType.', ''); name = $c.Name; id = $c.AutomationId; value = (Get-Val $el); enabled = $c.IsEnabled }
+  if ($d -lt ${depth}) { foreach ($k in $el.FindAll($TS::Children, [System.Windows.Automation.Condition]::TrueCondition)) { Walk $k ($d + 1) } }
+}
+Walk $win 0
+@{ window = $win.Current.Name; controls = $script:out; truncated = ($script:n -ge 250) } | ConvertTo-Json -Depth 4 -Compress`);
+  },
+  async ui_read(a, ctx) {
+    return uiaRun(ctx.settings, `${target(a)}$el = Find-Control $win $name $aid
+$v = Get-Val $el
+@{ name = $el.Current.Name; type = $el.Current.ControlType.ProgrammaticName; value = $v; enabled = $el.Current.IsEnabled } | ConvertTo-Json -Compress`);
+  },
+  async ui_set_text(a, ctx) {
+    return uiaRun(ctx.settings, `${target(a)}${decl('text', a.text)}
+$el = Find-Control $win $name $aid
+try { $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($text); 'Set.' }
+catch { $el.SetFocus(); Start-Sleep -Milliseconds 150; Set-Clipboard -Value $text; [System.Windows.Forms.SendKeys]::SendWait('^a'); [System.Windows.Forms.SendKeys]::SendWait('^v'); 'Typed through the keyboard.' }`);
+  },
+  async ui_click(a, ctx) {
+    return uiaRun(ctx.settings, `${target(a)}$el = Find-Control $win $name $aid
+$done = $false
+foreach ($p in @([System.Windows.Automation.InvokePattern], [System.Windows.Automation.SelectionItemPattern], [System.Windows.Automation.TogglePattern], [System.Windows.Automation.ExpandCollapsePattern])) {
+  try { $pat = $el.GetCurrentPattern($p::Pattern); if ($p -eq [System.Windows.Automation.InvokePattern]) { $pat.Invoke() } elseif ($p -eq [System.Windows.Automation.SelectionItemPattern]) { $pat.Select() } elseif ($p -eq [System.Windows.Automation.TogglePattern]) { $pat.Toggle() } else { $pat.Expand() }; $done = $true; break } catch {}
+}
+if (-not $done) { $r = $el.Current.BoundingRectangle; [void][W]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)); Start-Sleep -Milliseconds 80; [W]::mouse_event(2,0,0,0,[UIntPtr]::Zero); [W]::mouse_event(4,0,0,0,[UIntPtr]::Zero); 'Clicked at the control.' } else { 'Done.' }`);
+  },
+};
+
 module.exports = {
   tools: {
+    ...uiaTools,
     async screenshot(_a, ctx) { return screenshot(ctx.settings); },
     async act({ steps, screenshot: shot = true }, ctx) {
       if (!Array.isArray(steps) || !steps.length) throw new Error('No steps were given.');

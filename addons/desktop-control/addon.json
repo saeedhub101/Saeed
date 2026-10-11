@@ -1,28 +1,245 @@
 {
-  "id": "desktop-control", "name": "Screen control", "version": "1.0.0", "author": "Saeed",
-  "description": "Lets Saeed see the screen and use the mouse and keyboard to work inside other programs, such as a company system. Windows only. It asks your permission for each task, shows a red STOP bar, and Ctrl+Alt+X stops it at once.",
-  "main": "index.js", "permissions": ["desktop.control"], "idleSeconds": 120,
+  "id": "desktop-control",
+  "name": "Screen control",
+  "version": "1.1.0",
+  "author": "Saeed",
+  "description": "Lets Saeed see the screen and use the mouse and keyboard to work inside other programs, such as a company system. Windows only. It asks your permission for each task, shows a red STOP bar, and Ctrl+Alt+X stops it at once. Also reads and fills the controls of Windows programs directly (UI Automation) without screenshots.",
+  "main": "index.js",
+  "permissions": [
+    "desktop.control"
+  ],
+  "idleSeconds": 120,
   "tools": [
-    { "name": "screenshot", "risk": "system", "perm": ["desktop.control"],
+    {
+      "name": "screenshot",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
       "description": "Take a screenshot of the main screen. Mouse coordinates used by the other screen tools are pixels of THIS image. Always take one before acting.",
-      "schema": { "type": "object", "properties": {} } },
-    { "name": "act", "risk": "system", "perm": ["desktop.control"],
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "act",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
       "description": "Do 1 to 15 steps with the mouse and keyboard, then return a new screenshot. Steps: {action:'click',x,y,button?:'left'|'right'|'middle',count?:1|2}, {action:'move',x,y}, {action:'drag',x,y,x2,y2}, {action:'scroll',x?,y?,amount} (positive amount = down), {action:'type',text} (types into the focused field, any language), {action:'key',keys:'enter'|'tab'|'ctrl+s'|'alt+f4'|'f5'...}, {action:'wait',ms}. Click a field before typing in it. Do small steps and check the screenshot after each batch.",
-      "schema": { "type": "object", "properties": {
-        "steps": { "type": "array", "items": { "type": "object", "properties": {
-          "action": { "type": "string", "enum": ["click", "move", "drag", "scroll", "type", "key", "wait"] },
-          "x": { "type": "number" }, "y": { "type": "number" }, "x2": { "type": "number" }, "y2": { "type": "number" },
-          "button": { "type": "string" }, "count": { "type": "number" }, "amount": { "type": "number" },
-          "text": { "type": "string" }, "keys": { "type": "string" }, "ms": { "type": "number" } }, "required": ["action"] } },
-        "screenshot": { "type": "boolean", "description": "Return a screenshot afterwards (default true)." } }, "required": ["steps"] } },
-    { "name": "windows", "risk": "system", "perm": ["desktop.control"],
+      "schema": {
+        "type": "object",
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "click",
+                    "move",
+                    "drag",
+                    "scroll",
+                    "type",
+                    "key",
+                    "wait"
+                  ]
+                },
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "x2": {
+                  "type": "number"
+                },
+                "y2": {
+                  "type": "number"
+                },
+                "button": {
+                  "type": "string"
+                },
+                "count": {
+                  "type": "number"
+                },
+                "amount": {
+                  "type": "number"
+                },
+                "text": {
+                  "type": "string"
+                },
+                "keys": {
+                  "type": "string"
+                },
+                "ms": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "action"
+              ]
+            }
+          },
+          "screenshot": {
+            "type": "boolean",
+            "description": "Return a screenshot afterwards (default true)."
+          }
+        },
+        "required": [
+          "steps"
+        ]
+      }
+    },
+    {
+      "name": "windows",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
       "description": "List the open windows, or bring one to the front by part of its title.",
-      "schema": { "type": "object", "properties": { "action": { "type": "string", "enum": ["list", "focus"] }, "title": { "type": "string" } }, "required": ["action"] } }
+      "schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "focus"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "ui_tree",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
+      "description": "List the controls (buttons, fields, tables, menus) of a program window with their names, ids and values, WITHOUT a screenshot. Much faster and more exact than looking. depth 3 is usually enough.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string",
+            "description": "Part of the window title. Empty = the window in front."
+          },
+          "depth": {
+            "type": "number"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "ui_read",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
+      "description": "Read the value or text of one control (by name or automationId) of a program window.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string",
+            "description": "Part of the window title. Empty = the window in front."
+          },
+          "name": {
+            "type": "string"
+          },
+          "automationId": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "ui_set_text",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
+      "description": "Put text into a field of a program window directly (by name or automationId), without clicking and typing.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string",
+            "description": "Part of the window title. Empty = the window in front."
+          },
+          "name": {
+            "type": "string"
+          },
+          "automationId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "ui_click",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
+      "description": "Press a button, menu item, tab, checkbox or list item of a program window directly (by name or automationId).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string",
+            "description": "Part of the window title. Empty = the window in front."
+          },
+          "name": {
+            "type": "string"
+          },
+          "automationId": {
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    }
   ],
   "settings": [
-    { "key": "blocked", "label": "Never act in windows whose title contains", "type": "text",
-      "default": "Task Manager, Registry Editor, Windows Security, Command Prompt, PowerShell, Windows Terminal, Group Policy, Computer Management, User Account Control, BitLocker" },
-    { "key": "maxSide", "label": "Screenshot size (longest side, pixels)", "type": "number", "default": 1280 },
-    { "key": "delay", "label": "Pause after each step (ms)", "type": "number", "default": 250 }
-  ]
+    {
+      "key": "blocked",
+      "label": "Never act in windows whose title contains",
+      "type": "text",
+      "default": "Task Manager, Registry Editor, Windows Security, Command Prompt, PowerShell, Windows Terminal, Group Policy, Computer Management, User Account Control, BitLocker"
+    },
+    {
+      "key": "maxSide",
+      "label": "Screenshot size (longest side, pixels)",
+      "type": "number",
+      "default": 1280
+    },
+    {
+      "key": "delay",
+      "label": "Pause after each step (ms)",
+      "type": "number",
+      "default": 250
+    }
+  ],
+  "category": "other",
+  "bundle": "auto"
 }
