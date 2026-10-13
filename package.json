@@ -1,73 +1,29 @@
 {
-  "name": "avatar-agent",
-  "productName": "Avatar Agent",
-  "version": "0.5.0",
-  "description": "Saeed: desktop 3D avatar assistant (voice, chat, brain) with a studio for bones, poses and motions.",
+  "name": "avatar-agent-lifecycle-pro",
+  "version": "2.1.0",
+  "description": "Saeed Pro Desktop - Lifecycle Optimized General Task Automation Agent",
   "main": "src/main/main.js",
-  "author": "Saeed",
-  "license": "MIT",
   "scripts": {
-    "postinstall": "node scripts/vendor.js",
-    "start": "node scripts/vendor.js && electron .",
-    "predist": "node scripts/vendor.js && node scripts/build-addons.js",
-    "dist": "electron-builder --win nsis",
-    "release": "node scripts/vendor.js && node scripts/build-addons.js && electron-builder --win nsis --publish always",
-    "build-addons": "node scripts/build-addons.js"
+    "start": "electron .",
+    "check": "node scripts/check.js",
+    "build": "electron-builder --win"
   },
   "dependencies": {
-    "ws": "^8.18.0",
-    "adm-zip": "^0.5.16",
-    "electron-updater": "^6.3.9"
+    "electron": "^28.0.0"
   },
   "devDependencies": {
-    "electron": "^33.2.1",
-    "electron-builder": "^25.1.8",
-    "three": "0.170.0"
+    "electron-builder": "^24.9.0"
   },
   "build": {
-    "appId": "com.avataragent.app",
-    "productName": "Avatar Agent",
+    "appId": "com.saeed.lifecycle.pro",
+    "productName": "SaeedPro Desktop",
     "directories": {
       "output": "dist"
     },
-    "files": [
-      "src/**/*",
-      "package.json"
-    ],
     "win": {
       "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "icon": "src/assets/icon.png"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "Avatar Agent"
-    },
-    "asarUnpack": [
-      "src/main/addon-host.js"
-    ],
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "OWNER",
-        "repo": "saeed"
-      }
-    ],
-    "extraResources": [
-      {
-        "from": "build/addons-lib",
-        "to": "addons-lib"
-      }
-    ]
+        "nsis"
+      ]
+    }
   }
 }

@@ -1,57 +1,58 @@
-import { h } from './ui.js';
-const api = window.api;
-const $ = (id) => document.getElementById(id);
-const list = $('list'), input = $('input'), stateEl = $('state');
+document.addEventListener('DOMContentLoaded', () => {
+    const messagesContainer = document.getElementById('chat-messages');
+    const taskInput = document.getElementById('task-input');
+    const btnSend = document.getElementById('btn-send');
+    const approvalBox = document.getElementById('approval-box');
+    const approvalText = document.getElementById('approval-text');
+    const btnApprove = document.getElementById('btn-approve');
+    const btnCancel = document.getElementById('btn-cancel');
 
-function add(role, text, voice) {
-  list.append(h('div', { class: `msg ${role}${voice ? ' voice' : ''}`, dir: 'auto' }, text));
-  list.scrollTop = list.scrollHeight;
-}
-for (const m of await api.chatHistory()) add(m.role, m.text);
+    let currentTaskData = null;
 
-let live = null;   // the assistant message that is being written
-api.onChatEvent((ev) => {
-  if (ev.type === 'delta') {
-    if (!live) { live = h('div', { class: 'msg assistant', dir: 'auto' }, ''); list.append(live); }
-    live.textContent += ev.text; list.scrollTop = list.scrollHeight;
-  } else if (ev.type === 'message') {
-    if (ev.role === 'assistant' && live) { live.textContent = ev.text; live = null; }
-    else { live = null; add(ev.role, ev.text, ev.source === 'voice' && ev.role === 'user'); }
-  } else if (ev.type === 'state') stateEl.textContent = ev.text || '';
-  else if (ev.type === 'error') { live = null; add('error', ev.text); }
-  else if (ev.type === 'tool') add('tool', '⚙ ' + ev.text);
+    function appendMessage(text, sender = 'system') {
+        const div = document.createElement('div');
+        div.className = `message ${sender}`;
+        div.textContent = text;
+        messagesContainer.appendChild(div);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    btnSend.addEventListener('click', async () => {
+        const text = taskInput.value.trim();
+        if (!text) return;
+
+        appendMessage(text, 'user');
+        taskInput.value = '';
+
+        appendMessage('جاري تحليل الطلب، واستدعاء محرك الاستكشاف عند الطلب...', 'system');
+
+        try {
+            const response = await window.saeedAPI.executeTask(text, { clientName: 'مؤسسة الأعمال المتقدمة', recordId: 'REC-5542', taskQuery: text });
+            if (response.status === 'PENDING_APPROVAL') {
+                currentTaskData = response;
+                let cacheNote = response.fromCache ? ' [تم العثور على مهارة سابقة وتنفيذها لحظياً ⚡]' : ' [استكشاف جديد وتفريغ الموارد بنجاح 🧠]';
+                appendMessage(response.message + cacheNote, 'system');
+                approvalText.textContent = `بيانات التنفيذ المستهدفة: ${JSON.stringify(response.previewData)}`;
+                approvalBox.classList.remove('hidden');
+            } else {
+                appendMessage(response.message, 'system');
+            }
+        } catch (err) {
+            appendMessage(`حدث خطأ أثناء التنفيذ: ${err.message}`, 'system');
+        }
+    });
+
+    btnApprove.addEventListener('click', async () => {
+        approvalBox.classList.add('hidden');
+        appendMessage('جاري الاعتماد النهائي وحفظ المهارة في الذاكرة...', 'system');
+        
+        const res = await window.saeedAPI.confirmAction(true, { name: 'مهمة دورة الحياة المحسنة', keyword: 'تنفيذ', steps: currentTaskData.plan.steps }, currentTaskData.previewData);
+        appendMessage(res.message, 'system');
+    });
+
+    btnCancel.addEventListener('click', async () => {
+        approvalBox.classList.add('hidden');
+        const res = await window.saeedAPI.confirmAction(false, {}, {});
+        appendMessage(res.message, 'system');
+    });
 });
-
-let images = [];
-function drawThumbs() {
-  $('thumbs').replaceChildren(...images.map((im, i) => h('div', {}, h('img', { src: `data:${im.mime};base64,${im.data}` }), h('button', { onclick: () => { images.splice(i, 1); drawThumbs(); } }, '×'))));
-}
-// Large pictures are scaled down (long side 1800 px) so they are fast and cheap to send.
-async function addImage(file) {
-  if (!file || !file.type.startsWith('image/') || images.length >= 4) return;
-  const bmp = await createImageBitmap(file);
-  const k = Math.min(1, 1800 / Math.max(bmp.width, bmp.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-  images.push({ mime: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.92).split(',')[1] });
-  drawThumbs();
-}
-$('attach').onclick = () => $('file').click();
-$('file').onchange = async (e) => { for (const f of e.target.files) await addImage(f); e.target.value = ''; };
-input.addEventListener('paste', async (e) => {
-  const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'));
-  if (files.length) { e.preventDefault(); for (const f of files) await addImage(f); }
-});
-
-function send() {
-  const t = input.value.trim();
-  if (!t && !images.length) return;
-  api.chatSend(t, images);
-  input.value = ''; images = []; drawThumbs();
-}
-$('send').onclick = send;
-input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-$('stop').onclick = () => api.chatCancel();
-$('clear').onclick = async () => { await api.chatClear(); list.replaceChildren(); };
-input.focus();
