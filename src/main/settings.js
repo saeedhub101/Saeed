@@ -64,6 +64,7 @@ const DEFAULT_SETTINGS = {
     dangerous: false,                  // allow deleting drive roots, the Windows folder and the user profile folder
   },
   updates: { repo: '', autoCheck: true },
+  ui: { language: 'en' },
   addons: { registryUrl: '', sources: [], enabled: {}, settings: {}, trusted: {}, removed: [] },
   performance: { idleFps: 12 },
   web: { search: 'duckduckgo', maxResults: 6, fetchMaxChars: 12000 },   // duckduckgo (no key) | brave | tavily

@@ -1,0 +1,18 @@
+{
+  "id": "lang-ar",
+  "name": "Arabic interface (العربية)",
+  "version": "1.0.0",
+  "author": "Saeed",
+  "category": "language",
+  "bundle": "auto",
+  "description": "Arabic menus, windows and messages for Saeed, with right-to-left layout. Texts that are not translated stay in English.",
+  "permissions": [],
+  "provides": {
+    "language": {
+      "code": "ar",
+      "name": "العربية",
+      "rtl": true,
+      "file": "strings.json"
+    }
+  }
+}

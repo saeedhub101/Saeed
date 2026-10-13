@@ -1,4 +1,5 @@
 import { h, fmtBytes, fmtEta } from './ui.js';
+import { applyI18n } from './i18n.js';
 const api = window.api;
 const box = document.getElementById('box');
 let st = await api.updateGet();
@@ -48,3 +49,4 @@ function paint() {
 }
 paint();
 api.onUpdateState((s) => { st = s; paint(); });
+applyI18n();

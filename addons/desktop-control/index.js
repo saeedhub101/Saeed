@@ -199,6 +199,48 @@ foreach ($p in @([System.Windows.Automation.InvokePattern], [System.Windows.Auto
 }
 if (-not $done) { $r = $el.Current.BoundingRectangle; [void][W]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)); Start-Sleep -Milliseconds 80; [W]::mouse_event(2,0,0,0,[UIntPtr]::Zero); [W]::mouse_event(4,0,0,0,[UIntPtr]::Zero); 'Clicked at the control.' } else { 'Done.' }`);
   },
+  async list_windows(_a, ctx) {
+    return uiaRun(ctx.settings, `foreach ($w in $AE::RootElement.FindAll($TS::Children, [System.Windows.Automation.Condition]::TrueCondition)) {
+  if (-not $w.Current.Name) { continue }
+  [pscustomobject]@{ title = $w.Current.Name; className = $w.Current.ClassName; minimized = $w.Current.BoundingRectangle.Y -lt -10000 }
+} | ConvertTo-Json -Compress`);
+  },
+  async explore_window(a, ctx) {
+    let tree;
+    try { tree = await uiaTools.ui_tree(a, ctx); } catch (e) { tree = 'UI Automation failed: ' + e.message; }
+    let controlCount = 0;
+    try { controlCount = (JSON.parse(tree).controls || []).length; } catch { /* not JSON: treat as empty */ }
+    if (controlCount >= 4) return { text: `Read via UI Automation (${controlCount} controls, more reliable than a picture):\n${tree}` };
+    const shot = await module.exports.tools.screenshot(a, ctx);
+    return { text: `UI Automation found little (${controlCount} controls) in this window, so here is a screenshot instead. Use the "act" tool with pixel coordinates for this program.\n${shot.text}`, image: shot.image };
+  },
+  async ui_table(a, ctx) {
+    const max = Math.max(1, Math.min(500, Number(a.maxRows) || 200));
+    return uiaRun(ctx.settings, `${target(a)}$el = Find-Control $win $name $aid
+$grid = $null
+try { $grid = $el.GetCurrentPattern([System.Windows.Automation.GridPattern]::Pattern) } catch {}
+$table = $el.FindAll($TS::Descendants, New-Object System.Windows.Automation.PropertyCondition($AE::IsGridItemPatternAvailableProperty, $true))
+$rowsOut = @()
+if ($table.Count -gt 0) {
+  $byRow = @{}
+  foreach ($cell in $table) {
+    try { $gi = $cell.GetCurrentPattern([System.Windows.Automation.GridItemPattern]::Pattern) } catch { continue }
+    $r = $gi.Current.Row
+    if (-not $byRow.ContainsKey($r)) { $byRow[$r] = @{} }
+    $byRow[$r][$gi.Current.Column] = (Get-Val $cell)
+    if ($byRow[$r][$gi.Current.Column] -eq $null) { $byRow[$r][$gi.Current.Column] = $cell.Current.Name }
+  }
+  foreach ($r in ($byRow.Keys | Sort-Object)[0..([Math]::Min(${max} - 1, $byRow.Keys.Count - 1))]) {
+    $cols = $byRow[$r].Keys | Sort-Object
+    $rowsOut += ,(@($cols | ForEach-Object { $byRow[$r][$_] }))
+  }
+} else {
+  foreach ($row in ($el.FindAll($TS::Children, [System.Windows.Automation.Condition]::TrueCondition) | Select-Object -First ${max})) {
+    $rowsOut += ,(@($row.Current.Name))
+  }
+}
+@{ rows = $rowsOut; rowCount = $rowsOut.Count } | ConvertTo-Json -Depth 4 -Compress`);
+  },
 };
 
 module.exports = {

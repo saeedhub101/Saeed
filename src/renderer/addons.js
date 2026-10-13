@@ -1,4 +1,5 @@
 import { h, toast, debounce, fmtBytes, fmtEta } from './ui.js';
+import { applyI18n } from './i18n.js';
 const api = window.api;
 const root = document.getElementById('root');
 let creating = false;
@@ -149,3 +150,4 @@ function render() {
   window.scrollTo(0, y);
 }
 render();
+applyI18n();

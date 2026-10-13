@@ -274,6 +274,21 @@ async function registry() {
   return { list: out, errors };
 }
 
+// A direct link: an add-on .zip is installed, a .glb is saved so it can become an accessory pack.
+async function installUrl(url, onProgress) {
+  const clean = String(url).trim();
+  if (!/^https?:\/\//i.test(clean)) throw new Error('Paste a link that starts with http:// or https://');
+  if (/\.glb(\?|#|$)/i.test(clean)) {
+    const res = await fetch(clean);
+    if (!res.ok) throw new Error('Download failed: ' + res.status);
+    const tmp = path.join(app.getPath('temp'), `saeed-${Date.now()}.glb`);
+    fs.writeFileSync(tmp, Buffer.from(await res.arrayBuffer()));
+    return { glb: tmp };
+  }
+  const m = await download({ id: 'link', url: clean }, onProgress);
+  return { addon: m.name };
+}
+
 /* ---------- the library that ships with Saeed ---------- */
 // build-addons packs the add-ons into resources/addons-lib; "auto" ones are installed on first run, "offer" ones appear in the Store.
 const libDir = () => (app.isPackaged ? path.join(process.resourcesPath, 'addons-lib') : path.join(app.getAppPath(), 'build', 'addons-lib'));
@@ -317,6 +332,23 @@ function createPack(spec) {
   return id;
 }
 
+/* ---------- interface language, provided by a language add-on ---------- */
+function languages() {
+  const out = [{ code: 'en', name: 'English', rtl: false }];
+  for (const a of list) {
+    if (!isEnabled(a.id) || !a.provides || !a.provides.language) continue;
+    out.push({ code: a.provides.language.code, name: a.provides.language.name || a.name, rtl: !!a.provides.language.rtl, addon: a.id });
+  }
+  return out;
+}
+function stringsFor(code) {
+  if (!code || code === 'en') return { code: 'en', rtl: false, strings: {} };
+  const a = list.find((x) => isEnabled(x.id) && x.provides && x.provides.language && x.provides.language.code === code);
+  if (!a) return { code: 'en', rtl: false, strings: {} };
+  try { return { code, rtl: !!a.provides.language.rtl, strings: JSON.parse(fs.readFileSync(path.join(a.dir, a.provides.language.file || 'strings.json'), 'utf8')) }; }
+  catch { return { code: 'en', rtl: false, strings: {} }; }
+}
+
 /* ---------- info for windows ---------- */
 function summary() {
   return list.map((a) => ({
@@ -327,4 +359,4 @@ function summary() {
 }
 const running = () => [...procs.keys()];
 
-module.exports = { installBundled, installUrl, createPack, init, scan, summary, toolDefs, invokeTool, providersOf, callProvider, accessories, readAddonFile, installZip, download, remove, registry, stop, stopAll, running };
+module.exports = { languages, stringsFor, installBundled, installUrl, createPack, init, scan, summary, toolDefs, invokeTool, providersOf, callProvider, accessories, readAddonFile, installZip, download, remove, registry, stop, stopAll, running };

@@ -1,7 +1,7 @@
 {
   "id": "desktop-control",
   "name": "Screen control",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "Saeed",
   "description": "Lets Saeed see the screen and use the mouse and keyboard to work inside other programs, such as a company system. Windows only. It asks your permission for each task, shows a red STOP bar, and Ctrl+Alt+X stops it at once. Also reads and fills the controls of Windows programs directly (UI Automation) without screenshots.",
   "main": "index.js",
@@ -214,6 +214,63 @@
           },
           "automationId": {
             "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "list_windows",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
+      "description": "List every open top-level window (title, process, whether minimized), for tasks with several windows or dialogs.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    {
+      "name": "explore_window",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
+      "description": "Best-effort understanding of a program window: tries UI Automation first (ui_tree); if that finds almost nothing (a window that hides its own controls), falls back to a screenshot so it can be read visually. Always try this before acting in an unfamiliar program.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string",
+            "description": "Part of the window title. Empty = the window in front."
+          }
+        },
+        "required": []
+      }
+    },
+    {
+      "name": "ui_table",
+      "risk": "system",
+      "perm": [
+        "desktop.control"
+      ],
+      "description": "Read a table / grid / list-view control of a program window as rows and columns (header + cell text), for data too large to read one cell at a time.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "window": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "automationId": {
+            "type": "string"
+          },
+          "maxRows": {
+            "type": "number"
           }
         },
         "required": []

@@ -26,6 +26,23 @@ Tray app, transparent draggable character window, mic button, independent motion
 ### Prayer times
 One request per month to the Aladhan service, saved on the PC. Pick city, country and calculation method (Jordan: Ministry of Awqaf). Check the times against your local mosque.
 
+## Phase 6 — a general task engine (plan, explore, do, verify, learn) and a build check
+**Fixed:** a crash ("installUrl is not defined") when opening the Add-ons Store. The project now runs `npm run check` before every build, which would have caught it: syntax, undefined names, every module and add-on manifest, and the preload/main/window wiring.
+
+**Skill memory** (Settings → Skills Saeed learned), separate from what he remembers about you (`remember`) and from the Procedures you write by hand:
+- `recall_skills(query)` — looks up a previously learned way of doing something before starting a similar task.
+- `learn_skill({ name, app, keywords, steps, fields, verify, notes })` — saved after a multi-step task succeeds, in Saeed's own words (not raw coordinates), with how to check it worked. Saving the same name + app again updates it.
+- `update_skill(id, …)` / `forget_skill(id)` — corrects a skill, records a failure (so a skill that keeps failing stops being suggested), or deletes it.
+- Matching skills (by name/app/keywords) are added to the brain's instructions automatically, the same way Procedures are, so he does not need to be told to check — but he is also told to re-verify rather than trust a saved skill blindly if the screen looks different.
+
+**Flexible understanding of programs** (`desktop-control` v1.2): `explore_window` reads a window with UI Automation and only falls back to a screenshot when that finds almost nothing (unnamed-control programs); `list_windows` for tasks with several windows/dialogs; `ui_table` reads a grid/list-view control (rows and columns) instead of cell by cell.
+
+**The planning loop** is written into the brain's instructions rather than hard-coded, so it applies to every tool (desktop, browser, database, files): explore before acting, work in small steps and re-explore after each one, re-plan instead of repeating clicks when the screen does not match what was expected, ask for missing required fields instead of guessing, verify the actual result before reporting success, and confirm before anything irreversible.
+
+**Interface language as an add-on**: `lang-ar` (Arabic, right-to-left, included) translates known interface texts live, in every window, without changing the code — Settings → Language lists whatever language add-ons are installed. A language add-on is just `addon.json` with `provides.language: { code, name, rtl, file }` plus a `strings.json` of `"English text": "translation"`; `node scripts/extract-strings.js` lists the interface's current English texts as a starting point for a new one.
+
+**Still not automatic:** a database connection is never discovered or opened on its own — you set up each one (Settings for the `database` add-on) with its connection details and your own credentials; Saeed only ever uses a connection you configured. Outfits/accessories from ready clothing sites are not fetched automatically; a direct link (Add-ons → Install from link…) or **New accessory pack…** from your own .glb covers this for now.
+
 ## Phase 5 — Saeed works like a person at the computer
 **Built in (no add-on needed, controlled only by Permissions):**
 - **Files anywhere**: `find_files` (Windows Search index first, then a fast folder walk; Desktop, Documents and Downloads by default, any folder or every drive on request), list, read, write, copy, move, delete (Recycle Bin or permanent), file info, **`open_path`** (opens any file or folder with its default program) and `view_image`. "Open test.xlsx" now finds the file by name and opens it; he no longer asks you for a path he can find himself.
@@ -122,7 +139,7 @@ npm start
 ```
 npm run dist
 ```
-Output: `dist/Avatar Agent Setup 0.5.0.exe` (the build also packs the add-on library into the installer, see Phase 5). Speech recognition on this PC is now the **whisper-local** add-on, so the installer stays small.
+Output: `dist/Avatar Agent Setup 0.6.0.exe`. `npm run dist` / `npm run release` now run `node scripts/check.js` first and stop if it fails.. Speech recognition on this PC is now the **whisper-local** add-on, so the installer stays small.
 
 ## Conventions
 Rotations are in model space (degrees), on top of the rest pose: facing +Z, +Y up, character's left = +X, rest pose = standing with arms down (Pose → Arms down). If a model faces away use "Model faces" in the Studio top bar.

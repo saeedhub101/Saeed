@@ -1,4 +1,5 @@
 import { h, toast, debounce } from './ui.js';
+import { applyI18n } from './i18n.js';
 
 const api = window.api;
 let cfg = await api.getConfig();
@@ -109,3 +110,4 @@ api.onConfig((c) => {
   const el = document.activeElement;
   if (!el || el === document.body || el.tagName === 'BUTTON') render();
 });
+applyI18n();

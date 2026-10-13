@@ -1,4 +1,5 @@
 import { h, debounce, toast } from './ui.js';
+import { applyI18n } from './i18n.js';
 import { Voice } from './voice.js';
 
 const api = window.api;
@@ -257,6 +258,13 @@ function proceduresSection() {
     h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => { list.push({ name: '', keywords: '', text: '' }); render(); } }, 'Add a procedure')));
 }
 
+let uiLangs = await api.uiLanguages();
+function languageSection() {
+  return section('Language',
+    row('Interface language', SEL(S.ui, 'language', uiLangs.map((l) => [l.code, l.name]), true)),
+    note(uiLangs.length > 1 ? 'More languages appear here when you install a language add-on (Add-ons → Store → category Language). Some windows reload to apply the change.' : 'Install a language add-on (Add-ons → Store → category Language) to add more interface languages.'));
+}
+
 let userSecretNames = await api.secretNames('user:');
 function webSection() {
   const w = S.web;
@@ -276,6 +284,21 @@ function webSection() {
       if (!n || !valIn.value) return toast('Give a name and a value.');
       await api.setSecret('user:' + n, valIn.value); userSecretNames = await api.secretNames('user:'); render();
     } }, 'Save')));
+}
+
+let skillList = await api.skillsList();
+function skillsSection() {
+  const fmt = (t) => new Date(t).toLocaleDateString();
+  return section('Skills Saeed learned',
+    note('When Saeed completes a multi-step task in a program or system, he can save how he did it (learn_skill) and reuse it next time, instead of starting from scratch. This is separate from what he remembers about you and from the Procedures you write.'),
+    skillList.length ? skillList.map((s, i) => h('div', { class: 'box' },
+      h('div', { class: 'row' }, h('strong', { class: 'grow' }, s.name + (s.app ? ' — ' + s.app : '')),
+        h('span', { class: 'muted' }, `used ${s.uses || 0}×${s.failures ? ', failed ' + s.failures + '×' : ''} · ${fmt(s.updatedAt)}`),
+        h('button', { class: 'x', title: 'Forget', onclick: async () => { await api.skillsRemove(i); skillList = await api.skillsList(); render(); } }, '×')),
+      h('div', { class: 'muted' }, s.keywords),
+      h('div', { dir: 'auto', style: 'white-space:pre-wrap' }, s.steps),
+      s.verify ? h('div', { class: 'muted' }, 'Verify: ' + s.verify) : null))
+      : h('p', { class: 'muted' }, 'Nothing learned yet. It builds up as Saeed completes tasks in your programs.'));
 }
 
 let facts = await api.memoryList();
@@ -318,7 +341,7 @@ function performanceSection() {
 function render() {
   const y = window.scrollY;
   clearInterval(metricsTimer);
-  root.replaceChildren(audioSection(), sttSection(), llmSection(), ttsSection(), realtimeSection(), prayerSection(), launcherSection(), agentSection(), webSection(), memorySection(), proceduresSection(), updatesSection(), performanceSection());
+  root.replaceChildren(languageSection(), audioSection(), sttSection(), llmSection(), ttsSection(), realtimeSection(), prayerSection(), launcherSection(), agentSection(), webSection(), memorySection(), skillsSection(), proceduresSection(), updatesSection(), performanceSection());
   window.scrollTo(0, y);
 }
 render();
@@ -327,3 +350,4 @@ api.onConfig((c) => {
   cfg = c; S = c.settings;
   if (!document.activeElement || document.activeElement === document.body) render();
 });
+applyI18n();

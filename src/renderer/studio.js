@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { applyI18n } from './i18n.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Character } from '../shared/character.js';
 import { BONES, GROUPS, groupOf, autoMap } from '../shared/schema.js';
@@ -743,3 +744,4 @@ let last = performance.now();
 })(performance.now());
 
 await reloadModel();
+applyI18n();
