@@ -1,6 +1,17 @@
-// Runs with an electron stub on NODE_PATH (see check.js): loads every main-process module, validates add-on manifests.
-const fs = require('fs'), path = require('path');
+// Runs with an Electron stub (see check.js): loads every main-process module, validates add-on manifests.
+const fs = require('fs'), path = require('path'), os = require('os'), Module = require('module');
 const root = path.join(__dirname, '..');
+
+// NODE_PATH is searched after the repository's node_modules, so it cannot reliably replace
+// the installed Electron package. Intercept Electron imports explicitly for this isolated check.
+const stubPath = path.join(os.tmpdir(), 'saeed-check', 'node_modules', 'electron');
+const electronMock = require(stubPath);
+const originalLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (request === 'electron') return electronMock;
+  return originalLoad.call(this, request, parent, isMain);
+};
+
 let bad = 0;
 const fail = (m) => { bad++; console.log('  FAIL ' + m); };
 
@@ -22,7 +33,7 @@ for (const id of fs.readdirSync(path.join(root, 'addons'))) {
   const dir = path.join(root, 'addons', id);
   if (!fs.statSync(dir).isDirectory()) continue;
   let m;
-  try { m = JSON.parse(fs.readFileSync(path.join(dir, 'addon.json'), 'utf8')); } catch (e) { fail(`${id}: addon.json is not valid JSON`); continue; }
+  try { m = JSON.parse(fs.readFileSync(path.join(dir, 'addon.json'), 'utf8')); } catch { fail(`${id}: addon.json is not valid JSON`); continue; }
   if (m.id !== id) fail(`${id}: id "${m.id}" must equal the folder name`);
   if (m.category && !catList.includes(m.category)) fail(`${id}: unknown category ${m.category}`);
   const src = fs.existsSync(path.join(dir, 'index.js')) ? fs.readFileSync(path.join(dir, 'index.js'), 'utf8') : '';
