@@ -40,7 +40,9 @@ fs.writeFileSync(path.join(stub, 'index.js'), `const mk = () => new Proxy(functi
 const e = mk();
 module.exports = new Proxy({}, { get: (_t, k) => { if (k === 'app') return { getPath: () => ${JSON.stringify(os.tmpdir())}, getAppPath: () => ${JSON.stringify(root)}, isPackaged: false, requestSingleInstanceLock: () => true, setAppUserModelId() {}, whenReady: () => ({ then() {} }), on() {}, getVersion: () => '0.0.0', getLoginItemSettings: () => ({}), commandLine: { appendSwitch() {} } }; if (k === 'safeStorage') return { isEncryptionAvailable: () => false }; if (k === 'screen') return { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 }, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }), getAllDisplays: () => [] }; if (k === 'ipcMain') return { handle() {}, on() {} }; return e; } });
 `);
-const child = spawnSync(process.execPath, [path.join(__dirname, 'check-child.js')], { encoding: 'utf8', env: { ...process.env, NODE_PATH: path.join(os.tmpdir(), 'saeed-check', 'node_modules') } });
+const preload = path.join(os.tmpdir(), 'saeed-check', 'electron-preload.cjs');
+fs.writeFileSync(preload, `const Module = require('node:module');\nconst stub = require(${JSON.stringify(path.join(os.tmpdir(), 'saeed-check', 'node_modules', 'electron'))});\nconst load = Module._load;\nModule._load = function (request, parent, isMain) { if (request === 'electron') return stub; return load.call(this, request, parent, isMain); };\n`);
+const child = spawnSync(process.execPath, ['--require', preload, path.join(__dirname, 'check-child.js')], { encoding: 'utf8', env: process.env });
 process.stdout.write(child.stdout);
 if (child.status !== 0) failed++;
 
