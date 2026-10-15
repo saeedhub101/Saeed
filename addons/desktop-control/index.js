@@ -191,6 +191,27 @@ $el = Find-Control $win $name $aid
 try { $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($text); 'Set.' }
 catch { $el.SetFocus(); Start-Sleep -Milliseconds 150; Set-Clipboard -Value $text; [System.Windows.Forms.SendKeys]::SendWait('^a'); [System.Windows.Forms.SendKeys]::SendWait('^v'); 'Typed through the keyboard.' }`);
   },
+  async ui_select(a, ctx) {
+    return uiaRun(ctx.settings, `${target(a)}${decl('opt', a.option)}
+$el = Find-Control $win $name $aid
+try { $el.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Expand() } catch {}
+Start-Sleep -Milliseconds 300
+$item = $null
+$cond = New-Object System.Windows.Automation.PropertyCondition($AE::NameProperty, $opt)
+$item = $win.FindFirst($TS::Descendants, $cond)
+if (-not $item) { foreach ($c in $win.FindAll($TS::Descendants, [System.Windows.Automation.Condition]::TrueCondition)) { if ($c.Current.Name -like "*$opt*" -and ($c.Current.ControlType.ProgrammaticName -like '*ListItem*' -or $c.Current.ControlType.ProgrammaticName -like '*ComboBoxItem*')) { $item = $c; break } } }
+if ($item) {
+  $done = $false
+  try { $item.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select(); $done = $true } catch {}
+  if (-not $done) { $r = $item.Current.BoundingRectangle; [void][W]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2)); Start-Sleep -Milliseconds 80; [W]::mouse_event(2,0,0,0,[UIntPtr]::Zero); [W]::mouse_event(4,0,0,0,[UIntPtr]::Zero) }
+  try { $el.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse() } catch {}
+  "Chose \`"$opt\`". Current value: $(Get-Val $el)"
+} else {
+  try { $el.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern).Collapse() } catch {}
+  try { $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($opt); "Typed \`"$opt\`" into the field (it had no matching list item)." }
+  catch { throw "No item named \`"$opt\`" was found in this drop-down. Use ui_tree to see the exact text." }
+}`);
+  },
   async ui_click(a, ctx) {
     return uiaRun(ctx.settings, `${target(a)}$el = Find-Control $win $name $aid
 $done = $false

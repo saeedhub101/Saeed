@@ -54,7 +54,11 @@ function expand(p) {
   return missing ? null : s;
 }
 function resolveReal(p) {
-  const full = path.resolve(expand(p) || String(p));
+  const s = expand(p) || String(p);
+  // A relative path ("Desktop/notes.txt", "notes.txt") means a place under the user's own folders, never the
+  // app's install or working directory - resolving it against process.cwd() would silently land somewhere like
+  // Program Files, which is denied by default, and look to the caller like "no file access" instead of a bad path.
+  const full = path.isAbsolute(s) ? path.resolve(s) : path.resolve(os.homedir(), s);
   let probe = full;
   while (!fs.existsSync(probe)) { const up = path.dirname(probe); if (up === probe) break; probe = up; }
   return path.join(fs.realpathSync(probe), path.relative(probe, full));

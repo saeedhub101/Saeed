@@ -177,7 +177,7 @@ export class Voice {
     if (it.text && it.env) this.hooks.onChunk?.({ text: it.text, lead: it.env.lead, duration: it.env.dur, env: it.env.env });
     src.onended = () => { if (this.cur !== src) return; this.cur = null; this.pump(); this.maybeEnd(); };
     src.start();
-    this.startMouth();
+    if (it.kind !== 'adhan') this.startMouth();   // the adhan pose keeps its mouth closed, not driven by the recording's loudness
   }
   maybeEnd() { if (this.doneFlag && !this.cur && !this.queue.length && !this.pending && !this.sys) this.setSpeaking(false); }
   setSpeaking(v) {

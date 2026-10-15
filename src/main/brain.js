@@ -18,14 +18,17 @@ const DEFAULT_PROMPT = [
   'Your answer is read aloud: use short natural sentences, no markdown, no lists, no emoji. For long results (tables, reports) put them in a file with the tools and say where it is.',
   'Use the express tool to show an emotion or posture when it fits (do not overuse it).',
   'You can act like a capable person at the computer: find files by name anywhere with find_files (never ask the user for a path you can find yourself), open them with open_path, read them, search the internet in the background with web_search and web_fetch, call web APIs with http_request, run commands with run_command, and remember lasting facts with remember.',
+  'NEVER say you cannot access the user\'s files, the internet, their screen or a program as a general limitation - that is false, you have real tools for all of this. Always try the matching tool first (find_files, write_file, open_path, web_search, the UI/browser tools...). For a new file or folder the user did not give a full path for, put it under their own folders (Desktop, Documents, Downloads) rather than asking - find_files or system_info tells you where those are if you are unsure, you do not need to ask the user for their own home folder. If a tool call is refused, read the actual reason it gives (a permission, a missing item, a wrong name) and act on that specific reason - ask the user to change it in Permissions, or try the sensible alternative - instead of concluding you have no access at all.',
   'Use open_item for apps (Excel, Word, My Computer...), get_time for the time, and set_reminder when asked to remind.',
   'Use the other tools (files, Excel, Word, PDF, OCR...) when they are available and the task needs them: read before you change anything, never invent data, and report what you did in one or two sentences.',
   'To work inside another program: first EXPLORE it (ui_tree / explore_window; take a screenshot only if that gives nothing useful) rather than guessing coordinates. Prefer UI Automation tools (ui_tree, ui_read, ui_set_text, ui_click) over clicking by pixel position when a control has a name or automationId.',
   'Work in small steps and re-explore after each one. If the screen does not match what you expected (a dialog appeared, a field is missing, a save failed), stop acting blindly, explore again, and adjust the plan instead of repeating the same clicks.',
   'Before filling a form, list the fields you were given and the fields the screen asks for; ask the user (ask_user or confirm_with_user) for anything required that is missing instead of guessing it.',
   'VERIFY before you say a task is done: re-read the screen or the record after saving and check it matches what was asked. Never report success you have not checked.',
-  'recall_skills(what you are about to do) before starting a multi-step task in a program or a system, in case you already learned how. After a task that used several UI or system steps succeeds, call learn_skill with the steps that worked and how to verify success, so it is faster and more reliable next time. If a saved skill turns out to be wrong or the screen changed, call update_skill with the correction (outcome: \'failure\' when it did not work) so it is not reused blindly.',
+  'Always call recall_skills with a short description of the task before doing any work in a program, a website or a database, even if you think you already know how — a matching skill, if one exists, is given to you with its exact steps and saves you from exploring from scratch, which is both faster and more reliable. When one matches well, follow it directly instead of re-exploring, but still verify the result.',
+  'You do not need to remember to save a skill yourself: Saeed records the steps of any completed multi-step task in a program, website or database automatically in the background. Still call learn_skill yourself when you want to add something the automatic recording cannot know, such as what a field actually means, a rule to always follow, or a correction (use update_skill with outcome: \'failure\' when a saved skill turns out wrong or the screen changed, so it stops being suggested).',
   'Before an irreversible step in any system (submit, issue, send, pay, delete, overwrite) call confirm_with_user with a clear question.',
+  'For logging in, signing up, or anything on a site that needs the user\'s own account: open the browser with visible:true so the user can see it and step in for a CAPTCHA or a code, and tell them briefly that you opened it. Big sites often load the login form a moment after the page itself, or hide it behind a button like "Log in" or "Sign up" that must be clicked first - if a field you expect is not in the last snapshot, click what opens the form, wait briefly, then take a fresh snapshot before concluding the field does not exist. Never report a field as missing from only the first snapshot.',
   'If you cannot do something, say so briefly and say which add-on would be needed.',
 ].join(' ');
 
@@ -49,8 +52,9 @@ const CORE_TOOLS = [
 ];
 const toolDefs = () => [...CORE_TOOLS, ...core.defs(), ...addons.toolDefs()];
 
-async function execTool(settings, name, args, { onIntent, onTool, signal } = {}) {
+async function execTool(settings, name, args, { onIntent, onTool, signal, trace } = {}) {
   if (onTool) onTool({ name, args });
+  if (trace) traceCall(trace, name, args);
   if (name === 'express') { if (INTENTS.includes(args.intent) && onIntent) onIntent(args.intent); return 'ok'; }
   if (name === 'open_item') return actions.openItem(args.name, settings);
   if (name === 'get_time') return new Date().toString();
@@ -64,6 +68,62 @@ async function execTool(settings, name, args, { onIntent, onTool, signal } = {})
   if (name === 'forget_skill') return skills.forget(args.id);
   if (core.has(name)) return core.run(name, args, { settings });
   return addons.invokeTool(name, args, signal);
+}
+
+
+/* ---------- automatic skill capture ---------- */
+// Which tool calls are worth remembering, and how to describe them in plain words (never the typed values,
+// so the saved skill stays general instead of being tied to one person's data). This runs in code, not by
+// asking the model to remember - so a skill is captured even if the model itself never calls learn_skill.
+const SYSTEM_PREFIXES = ['desktop-control__', 'browser__', 'database__'];
+const isSystemCall = (name) => SYSTEM_PREFIXES.some((p) => name.startsWith(p)) || name === 'run_command';
+const ACTION_TOOLS = new Set(['desktop-control__ui_click', 'desktop-control__ui_set_text', 'desktop-control__ui_select', 'desktop-control__act', 'browser__click', 'browser__type', 'browser__select', 'browser__press', 'database__execute', 'run_command']);
+const READ_TOOLS = new Set(['desktop-control__ui_read', 'desktop-control__ui_table', 'database__query', 'browser__extract']);
+const where = (a) => a.window ? ` in "${a.window}"` : '';
+const field = (a) => a.name || a.automationId || (a.id != null ? `[${a.id}]` : '');
+function describeCall(name, a) {
+  switch (name) {
+    case 'desktop-control__ui_click': return `Click "${field(a)}"${where(a)}`;
+    case 'desktop-control__ui_set_text': return `Fill in "${field(a)}"${where(a)}`;
+    case 'desktop-control__ui_select': return `Choose "${a.option || ''}" in "${field(a)}"${where(a)}`;
+    case 'desktop-control__act': return 'Click/type at a fixed screen position (prefer the UI Automation tools next time if the program supports them)';
+    case 'desktop-control__ui_read': return `Read "${field(a)}"${where(a)} to check it`;
+    case 'desktop-control__ui_table': return `Read the table "${field(a)}"${where(a)}`;
+    case 'browser__open': return `Open the page ${a.url || ''}`.trim();
+    case 'browser__click': return `Click ${field(a)} on the page`;
+    case 'browser__type': return `Type into ${field(a)} on the page`;
+    case 'browser__select': return `Choose an option in ${field(a)} on the page`;
+    case 'browser__extract': return 'Read the page to check it';
+    case 'database__query': return `Check the data (${(a.sql || '').split(/\s+/).slice(0, 2).join(' ')}…) on "${a.connection || ''}"`.trim();
+    case 'database__execute': return `Run a ${(a.sql || '').trim().split(/\s+/)[0] || 'change'} on "${a.connection || ''}"`;
+    case 'run_command': return 'Run a command';
+    default: return name.includes('__') ? name.split('__')[1].replace(/_/g, ' ') : name;
+  }
+}
+function traceCall(trace, name, args) { if (isSystemCall(name)) trace.push({ name, args: args || {} }); }
+function guessApp(trace) {
+  for (const c of trace) if (c.args.window) return c.args.window;
+  for (const c of trace) if (c.args.url) { try { return new URL(c.args.url.includes('://') ? c.args.url : 'https://' + c.args.url).hostname; } catch { return c.args.url; } }
+  for (const c of trace) if (c.args.connection) return c.args.connection;
+  if (trace.some((c) => c.name === 'run_command')) return 'the command line';
+  return '';
+}
+function keywordsFrom(text) {
+  const stop = new Set(['the', 'a', 'an', 'to', 'for', 'and', 'in', 'on', 'with', 'this', 'that', 'my', 'please', 'من', 'في', 'على', 'الى', 'إلى', 'و', 'هذا', 'هذه']);
+  return [...new Set(actions.norm(text).split(' ').filter((w) => w.length > 2 && !stop.has(w)))].slice(0, 8).join(', ');
+}
+// Called after a turn finishes. Saves what was done automatically, unless the model already saved or corrected a skill itself this turn.
+function autoCapture(text, trace, calledLearn) {
+  if (calledLearn || trace.length < 2) return;
+  const actionSteps = trace.filter((c) => ACTION_TOOLS.has(c.name));
+  if (!actionSteps.length) return;                                     // exploring/reading only: nothing to repeat
+  const verifyStep = [...trace].reverse().find((c) => READ_TOOLS.has(c.name));
+  const steps = trace.filter((c) => ACTION_TOOLS.has(c.name) || c === verifyStep).map((c, i) => `${i + 1}. ${describeCall(c.name, c.args)}`).join('\n');
+  skills.learn({
+    name: String(text).trim().slice(0, 70) || 'Task', app: guessApp(trace), keywords: keywordsFrom(text),
+    steps, verify: verifyStep ? describeCall(verifyStep.name, verifyStep.args) : 'Re-check the result in the program matches the request.',
+    notes: 'learned automatically from a completed task',
+  });
 }
 
 let hist = null, timer;
@@ -93,12 +153,17 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
   while (recent.length && recent[0].role !== 'user') recent.shift();
   if (images.length && recent.length) { const last = recent[recent.length - 1]; last.text = text; last.images = images; }
   const system = (settings.llm.systemPrompt || DEFAULT_PROMPT) + procedureText(settings, text) + (settings.memory && settings.memory.enabled ? memory.promptText() : '') + skills.promptText(text) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
+  const trace = []; let calledLearn = false;
   try {
     const reply = await llm.runAgent(settings, {
       system, history: recent, tools: toolDefs(), signal, onText,
-      execTool: (name, args) => execTool(settings, name, args, { onIntent, onTool, signal }),
+      execTool: (name, args) => {
+        if (name === 'learn_skill' || name === 'update_skill') calledLearn = true;
+        return execTool(settings, name, args, { onIntent, onTool, signal, trace });
+      },
     });
     h.push({ role: 'assistant', text: reply, t: Date.now() }); save();
+    autoCapture(text, trace, calledLearn);
     return { text: reply };
   } catch (e) {
     if (h[h.length - 1] === mine) h.pop();
