@@ -104,6 +104,8 @@ function selectLocalTools(tools, messages) {
     || (latestTrimmed.split(/\\s+/).length <= 3 && /^(?:yes|yeah|yep|ok|okay|sure|continue|go ahead|do it|proceed|نعم|اه|أه|تمام|اكمل|تابع|نفذ|اعملها|كمل|موافق)/i.test(latestTrimmed));
   const userText = followUp && previous ? previous + ' ' + latest : latest;
   const text = userText.toLowerCase().replace(/[\\u064B-\\u065F\\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  const recentToolContext = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role === 'tool').slice(-2).map((m) => String(m.text || '').slice(-600)).join(' ');
+  const semanticText = (text + ' ' + recentToolContext.toLowerCase()).replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
   const hasImages = (Array.isArray(messages) ? messages : []).some((m) => m && Array.isArray(m.images) && m.images.length > 0);
   const chosen = new Set();
   const exact = (names) => { for (const t of defs) if (names.includes(t.name)) chosen.add(t.name); };
@@ -137,7 +139,7 @@ function selectLocalTools(tools, messages) {
   // Keep a small semantic fallback catalogue for mixed or poorly worded requests.
   // Only add-on tools are eligible here; raw shell/API tools stay opt-in by explicit intent.
   {
-    const words = [...new Set(text.split(/[^\\p{L}\\p{N}]+/u).filter((w) => w.length >= 3))];
+    const words = [...new Set(semanticText.split(/[^\\p{L}\\p{N}]+/u).filter((w) => w.length >= 3))];
     const ranked = defs.filter((t) => t.name.includes('__')).map((t) => {
       const hay = (t.name + ' ' + String(t.description || '').slice(0, 320)).toLowerCase()
         .replace(/[\\u064B-\\u065F\\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
