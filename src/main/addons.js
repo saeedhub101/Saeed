@@ -89,10 +89,13 @@ async function call(a, target, name, args, signal, onStream) {
   try {
     await p.ready;
     const env = { denyPaths: perms.denyList(), settings: settingsOf(a) };
-    return await Promise.race([
-      send(p, { type: 'call', target, name, args, env }, onStream),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('The add-on took too long (5 minutes).')), 300000)),
-    ]);
+    let timeout;
+    try {
+      return await Promise.race([
+        send(p, { type: 'call', target, name, args, env }, onStream),
+        new Promise((_, rej) => { timeout = setTimeout(() => { stop(a.id); rej(new Error('The add-on took too long (5 minutes); its process was stopped.')); }, 300000); }),
+      ]);
+    } finally { clearTimeout(timeout); }
   } finally {
     if (signal) signal.removeEventListener('abort', onAbort);
     if (procs.get(a.id) === p) armIdle(a, p);
