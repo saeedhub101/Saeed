@@ -97,8 +97,8 @@ function llmSection() {
       kids.push(
         row('Base URL', T(p, 'baseUrl')),
         row('Model', model, dl),
-        row('Reasoning effort', SEL(c, 'reasoningEffort', [['low', 'Low — faster'], ['medium', 'Medium'], ['high', 'High — strongest reasoning']])),
-        note('High reasoning is sent only to supported GPT-5 models. Model usage is billed by your provider.'),
+        row('Reasoning effort', SEL(c, 'reasoningEffort', [['low', 'Low — faster'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Maximum — deepest GPT-6 reasoning']])),
+        note('GPT-6 supports extra-high and maximum reasoning; GPT-5 uses its supported effort levels. Higher effort may increase latency and token cost.'),
         keyField(c.provider, 'API key'));
     } else {
       kids.push(row('Base URL', T(p, 'baseUrl')), row('Model', model), keyField(c.provider, 'API key'));
