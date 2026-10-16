@@ -56,10 +56,11 @@ try {
   if (!agentSource.includes('if (signal && signal.aborted) throw error')) fail('agent swallows cancellation while recovering from tool errors');
 } catch (e) { fail('agent orchestration checks could not run: ' + e.message); }
 
-/* 2c. failed-call guard is exercised in an async helper check launched before process exit. */
+/* 2c. failed-call guard is awaited before the acceptance process exits. */
+let retryGuardTest = Promise.resolve();
 try {
   const runnerFactory = require(path.join(root, 'src/main/llm.js'))._test.createToolRunner;
-  (async () => {
+  retryGuardTest = (async () => {
     let calls = 0;
     const runner = runnerFactory(async (_name, args) => { calls++; return args.path === 'missing' ? 'Error: file not found' : 'Saved successfully'; }, { aborted: false });
     await runner('write_file', { path: 'missing' });
@@ -67,7 +68,7 @@ try {
     if (calls !== 1) throw new Error('identical failed tool call was executed twice');
     await runner('write_file', { path: 'corrected' });
     if (calls !== 2) throw new Error('corrected arguments were blocked after an earlier failure');
-  })().catch((e) => { console.error('  FAIL tool-call retry guard: ' + e.message); process.exitCode = 1; });
+  })();
 } catch (e) { fail('tool-call retry guard could not load: ' + e.message); }
 
 /* 2d. long-term memory retrieval prioritizes relevant facts instead of dumping the whole memory. */
@@ -231,5 +232,6 @@ try {
     if (!String(externalWrite).startsWith('Action paused: explicit confirmation is required')) fail('shared executor allowed an external write without confirmation');
     if (!bad) console.log('  ok   shared executor blocks unconfirmed or mismatched high-impact actions');
   } catch (e) { fail('shared executor policy tests could not run: ' + e.message); }
+  await retryGuardTest.catch((e) => fail('tool-call retry guard: ' + e.message));
   process.exit(bad ? 1 : 0);
 })();
