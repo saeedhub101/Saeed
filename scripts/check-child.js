@@ -53,6 +53,8 @@ try {
     if (start < 0 || !agentSource.slice(start, start + 800).includes(second)) fail(label + ' is missing after the tool-step limit');
   }
   if (!agentSource.includes('function createToolRunner')) fail('agent does not guard against repeated failed tool calls');
+  if (!agentSource.includes("Object.defineProperty(b, '_invalidInput'")) fail('Anthropic parser does not mark malformed tool JSON');
+  if (!agentSource.includes('u._invalidInput')) fail('Anthropic agent may execute malformed tool JSON');
   if (!agentSource.includes('if (signal && signal.aborted) throw error')) fail('agent swallows cancellation while recovering from tool errors');
   const llmTest = require(path.join(root, 'src/main/llm.js'))._test;
   if (llmTest.parseToolArguments('{"path":"ok"}').path !== 'ok') fail('valid tool JSON arguments were not parsed');
