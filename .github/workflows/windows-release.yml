@@ -45,7 +45,7 @@ jobs:
             Write-Error "Release version must be semantic MAJOR.MINOR.PATCH, for example 0.7.1."
             exit 1
           }
-          $currentVersion = [version](Get-Content package.json -Raw | ConvertFrom-Json).version
+          $currentVersion = [version]((Get-Content package.json -Raw | ConvertFrom-Json).version)
           $requestedVersion = [version]$env:RELEASE_VERSION
           if ($requestedVersion -le $currentVersion) {
             Write-Error "Release version must be greater than the current package version $currentVersion."
