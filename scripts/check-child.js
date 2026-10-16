@@ -100,6 +100,9 @@ try {
   if (!commandTools.some((t) => t.name === 'run_command')) fail('local tool router missed run_command for an explicit Arabic PowerShell request');
   const apiTools = selectTools(catalogue, [{ role: 'user', text: 'Call the REST API endpoint with an HTTP request' }]);
   if (!apiTools.some((t) => t.name === 'http_request')) fail('local tool router missed HTTP tools for an explicit API request');
+  const mixedTools = selectTools(catalogue, [{ role: 'user', text: 'افتح الموقع ثم اقرأ جدول البيانات في Excel' }]);
+  if (!mixedTools.some((t) => t.name === 'browser__click') || !mixedTools.some((t) => t.name === 'excel__read_workbook')) fail('local tool router failed to preserve multiple relevant tool families in a mixed request');
+  if (mixedTools.some((t) => t.name === 'run_command' || t.name === 'http_request')) fail('local tool router exposed privileged core tools through semantic fallback');
   const browserTools = selectTools(catalogue, [{ role: 'user', text: 'افتح صفحة في المتصفح واضغط الزر' }]);
   if (!browserTools.some((t) => t.name === 'browser__click') || !browserTools.some((t) => t.name === 'desktop-control__ui_read')) fail('local tool router missed browser and desktop tools for an Arabic UI request');
   const cognitivePrompt = require(path.join(root, 'src/main/brain.js')).defaultPrompt();
