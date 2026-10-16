@@ -63,6 +63,16 @@ try {
   if (parse('{"tool_call":{"name":"open_item","args":{}}}', defs).length) fail('local tool parser accepted missing required arguments');
   if (parse('{"tool_call":{"name":"express","args":{"intent":"destroy"}}}', defs).length) fail('local tool parser accepted an invalid enum');
   if (parse('Example JSON only: {"name":"open_item","args":{"name":"Excel"}}', defs).length) fail('local tool parser executed an ordinary JSON example in prose');
+  const selectTools = require(path.join(root, 'addons/llm-llamacpp/index.js')).__test.selectLocalTools;
+  const catalogue = [
+    { name: 'confirm_with_user' }, { name: 'open_item' }, { name: 'web_search' },
+    { name: 'excel__read_workbook' }, { name: 'word__create_document' },
+    { name: 'browser__click' }, { name: 'desktop-control__ui_read' }, { name: 'database__query' },
+  ];
+  const excelTools = selectTools(catalogue, [{ role: 'user', text: 'أنشئ تقرير Excel' }]);
+  if (!excelTools.some((t) => t.name === 'excel__read_workbook')) fail('local tool router missed Excel tools for an Arabic Excel request');
+  const browserTools = selectTools(catalogue, [{ role: 'user', text: 'افتح صفحة في المتصفح واضغط الزر' }]);
+  if (!browserTools.some((t) => t.name === 'browser__click') || !browserTools.some((t) => t.name === 'desktop-control__ui_read')) fail('local tool router missed browser and desktop tools for an Arabic UI request');
   const validate = require(path.join(root, 'src/main/brain.js')).validateToolArgs;
   const nested = { type: 'object', properties: { profile: { type: 'object', properties: { age: { type: 'integer', minimum: 0 } }, required: ['age'] } }, required: ['profile'] };
   if (validate({ profile: { age: 8 } }, nested) !== null) fail('central tool validator rejected valid nested arguments');
