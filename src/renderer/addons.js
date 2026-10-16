@@ -94,11 +94,30 @@ function storeCard(e) {
     go.disabled = true; b.hidden = false; t.textContent = 'starting…';
     const r = await api.addonsInstall(e);
     b.hidden = true; t.textContent = '';
-    if (r.ok) toast(`${e.name} installed.`); else { go.disabled = false; if (r.error !== 'Cancelled.') toast(r.error); }
+    if (r.ok) { toast(`${e.name} installed.`); await loadStore(); render(); }
+    else { go.disabled = false; if (r.error !== 'Cancelled.') toast(r.error); }
   } }, label);
+  const modelControls = e.id === 'llm-llamacpp' && e.installed
+    ? (() => {
+      const pick = h('select', { class: 'grow' },
+        h('option', { value: 'qwen3-0.6b' }, 'Qwen3 0.6B — smaller (~430 MB)'),
+        h('option', { value: 'qwen3-4b' }, 'Qwen3 4B — stronger (~2.5 GB)'));
+      const download = h('button', { class: 'btn primary', onclick: async () => {
+        download.disabled = true; b.hidden = false; t.textContent = 'Downloading selected Qwen model…';
+        const r = await api.addonsDownloadModel(pick.value);
+        download.disabled = false;
+        if (r.ok) { t.textContent = 'Model downloaded and selected. Local Brain can now use it.'; toast('Qwen model ready.'); }
+        else { t.textContent = 'Model download failed: ' + r.error; toast(r.error); }
+        await loadStore(); render();
+      } }, 'Download Qwen model');
+      return h('div', { class: 'form' },
+        h('div', { class: 'meta' }, 'The add-on is the runtime; Qwen is a separate model file. Choose the model here and download it explicitly.'),
+        h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Qwen model'), pick),
+        h('div', { class: 'btns' }, download));
+    })() : null;
   return h('div', { class: 'card' },
     h('div', { class: 'top' }, h('div', { class: 'grow' }, h('h4', {}, e.name, ' ', h('span', { class: 'meta' }, `v${e.version}${e.author ? ' · ' + e.author : ''}${e.size ? ' · ' + fmtBytes(e.size) : ''}${e.source === 'included' ? ' · included with Saeed' : ''}`)), h('div', { class: 'meta' }, e.description)), go),
-    h('div', { class: 'chips' }, (e.permissions || []).map(chip)), b, t);
+    h('div', { class: 'chips' }, (e.permissions || []).map(chip)), modelControls, b, t);
 }
 
 // Makes an add-on from the user's own GLB: a hat, a bag, or clothes made for the same skeleton.
