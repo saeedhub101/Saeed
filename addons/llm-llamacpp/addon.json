@@ -1,11 +1,11 @@
 {
   "id": "llm-llamacpp",
   "name": "Local brain (Qwen / Llama / any GGUF)",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "Saeed",
   "category": "brain",
   "bundle": "none",
-  "description": "Optional local AI brain (Qwen / Llama / GGUF). Downloaded separately from Saeed and loaded only when selected. Runs on this PC without cloud API fees; the model file is downloaded on first use and stored outside the app installation.",
+  "description": "Optional local AI brain (Qwen / Llama / GGUF). Downloaded separately from Saeed and loaded only when selected. Runs on this PC without cloud API fees; the selected model downloads on first use and is stored outside the app installation.",
   "main": "index.js",
   "permissions": [],
   "idleSeconds": 120,
@@ -16,10 +16,26 @@
   },
   "settings": [
     {
+      "key": "modelChoice",
+      "label": "Choose local model",
+      "type": "select",
+      "default": "qwen3-4b",
+      "options": [
+        [
+          "qwen3-0.6b",
+          "Qwen3 0.6B — tiny / lighter (~0.4 GB)"
+        ],
+        [
+          "qwen3-4b",
+          "Qwen3 4B — stronger (~2.5 GB)"
+        ]
+      ]
+    },
+    {
       "key": "modelUrl",
-      "label": "Model download URL (GGUF; Qwen3 4B recommended)",
+      "label": "Custom GGUF URL (optional; overrides the preset)",
       "type": "text",
-      "default": "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf"
+      "default": ""
     },
     {
       "key": "modelPath",
