@@ -163,7 +163,9 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
     const r = await addons.callProvider('llm', id, { system, messages: msgs, tools: defs }, signal, onText);
     if (r.text) all += (all ? ' ' : '') + r.text;
     if (!r.toolCalls || !r.toolCalls.length) return all.trim();
-    msgs.push({ role: 'assistant', text: r.text || '', toolCalls: r.toolCalls });
+    // Keep a model turn in local chat history so the following tool result is not a consecutive user turn.
+    // This marker is internal context only; it is never added to the visible answer.
+    msgs.push({ role: 'assistant', text: r.text || '[Requested tool: ' + r.toolCalls.map((tc) => tc.name).join(', ') + ']', toolCalls: r.toolCalls });
     for (const tc of r.toolCalls) {
       const out = await execTool(tc.name, tc.args || {});
       msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.name, text: rText(out) });
