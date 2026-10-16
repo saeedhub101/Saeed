@@ -126,7 +126,7 @@ function devKeys(w) {
 function openStudio(tab = 'bones') {
   if (alive(studioWin)) { studioWin.show(); studioWin.focus(); studioWin.webContents.send('studio:tab', tab); return; }
   studioWin = new BrowserWindow({
-    width: 1320, height: 840, minWidth: 1000, minHeight: 640, backgroundColor: '#14171c', title: 'Avatar Studio', autoHideMenuBar: true,
+    width: 1320, height: 840, minWidth: 1000, minHeight: 640, backgroundColor: '#14171c', title: 'Saeed Studio', autoHideMenuBar: true,
     webPreferences: { preload, contextIsolation: true, sandbox: true },
   });
   studioWin.removeMenu();
