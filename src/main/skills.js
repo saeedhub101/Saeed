@@ -13,8 +13,17 @@ function load() {
   try { skills = JSON.parse(fs.readFileSync(file(), 'utf8')); } catch { skills = []; }
   return skills;
 }
-let timer;
-function save() { clearTimeout(timer); timer = setTimeout(() => fs.writeFile(file(), JSON.stringify(load(), null, 1), () => {}), 300); }
+function save() {
+  const target = file(), tmp = target + '.tmp';
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(load(), null, 1), 'utf8');
+    fs.renameSync(tmp, target);
+  } catch (error) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* cleanup is best effort */ }
+    throw error;
+  }
+}
 
 const words = (s) => String(s || '').toLowerCase().split(/[,\s]+/).filter(Boolean);
 const slug = () => Math.random().toString(36).slice(2, 8);
