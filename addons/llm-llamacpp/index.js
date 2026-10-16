@@ -10,51 +10,18 @@ let state = null, statePromise = null;
 async function modelFile(ctx) {
   const configuredPath = String(ctx.settings.modelPath || '').trim();
   if (configuredPath && fs.existsSync(configuredPath) && fs.statSync(configuredPath).isFile()) return configuredPath;
-  const presetUrls = {
-    'qwen3-0.6b': 'https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_0.gguf',
-    'qwen3-4b': 'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf',
+  const presets = {
+    'qwen3-0.6b': 'Qwen3-0.6B-Q4_0.gguf',
+    'qwen3-4b': 'Qwen3-4B-Q4_K_M.gguf',
   };
-  const choice = String(ctx.settings.modelChoice || 'qwen3-4b');
-  const configuredUrl = String(ctx.settings.modelUrl || '').trim();
-  // Older installs may have the previous 4B URL saved in settings. Treat either preset
-  // URL as a preset, so switching models works without requiring users to clear old settings.
-  const isPresetUrl = Object.values(presetUrls).includes(configuredUrl);
-  const url = configuredUrl && !isPresetUrl ? configuredUrl : (presetUrls[choice] || presetUrls['qwen3-4b']);
-  let filename;
-  try {
-    const parsed = new URL(url);
-    if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('Only HTTP or HTTPS model links are supported.');
-    filename = path.basename(decodeURIComponent(parsed.pathname));
-  } catch (e) { throw new Error('Invalid model download link: ' + e.message); }
-  if (!filename || filename === '.' || filename === '..' || !/\.gguf$/i.test(filename)) throw new Error('The model link must point to a .gguf file.');
-  const dir = path.join(ctx.dataDir, 'models');
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, filename);
-  if (fs.existsSync(file) && fs.statSync(file).isFile() && fs.statSync(file).size > 0) return file;
-  const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok || !res.body) throw new Error('Model download failed: HTTP ' + res.status);
-  const total = Number(res.headers.get('content-length')) || 0;
-  const tmp = file + '.part';
-  let got = 0, last = 0;
-  const progress = new Transform({
-    transform(chunk, _encoding, callback) {
-      got += chunk.length;
-      if (Date.now() - last > 1000) {
-        last = Date.now();
-        ctx.status('Downloading the model… ' + (got / 1048576).toFixed(0) + (total ? ' of ' + (total / 1048576).toFixed(0) : '') + ' MB');
-      }
-      callback(null, chunk);
-    },
-  });
-  try {
-    await pipeline(Readable.fromWeb(res.body), progress, fs.createWriteStream(tmp));
-    if (!fs.existsSync(tmp) || fs.statSync(tmp).size === 0) throw new Error('The downloaded model file is empty.');
-    fs.renameSync(tmp, file);
-    return file;
-  } catch (e) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* cleanup is best effort */ }
-    throw new Error('Model download failed: ' + e.message);
+  const choice = String(ctx.settings.modelChoice || 'qwen3-0.6b');
+  const filename = path.basename(String(ctx.settings.modelFile || presets[choice] || ''));
+  if (!filename || !/\\.gguf$/i.test(filename)) {
+    throw new Error('Choose a local GGUF model file in Add-ons → Local brain settings, or download a model there first. Saeed never downloads multi-GB model files automatically.');
   }
+  const file = path.join(ctx.dataDir, 'models', filename);
+  if (fs.existsSync(file) && fs.statSync(file).isFile() && fs.statSync(file).size > 0) return file;
+  throw new Error('The selected local model is not downloaded. Open Add-ons → Store / Local brain and explicitly download a model first. No model was downloaded automatically.');
 }
 
 async function ensure(ctx) {
