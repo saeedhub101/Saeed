@@ -204,7 +204,7 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
         if (issue) return 'Tool call rejected because its arguments are invalid: ' + issue + '. Correct the arguments and try again.';
         if (name === 'learn_skill' || name === 'update_skill') calledLearn = true;
         const traceStart = trace.length;
-        const resultText = (value) => typeof value === 'string' ? value : String((value && value.text) || JSON.stringify(value) || '');
+        const resultText = (value) => typeof value === 'string' ? value : String((value && typeof value.text === 'string' && value.text) || (value && value.error) || '');
         const markResult = (value, ok) => {
           if (trace.length > traceStart) {
             const call = trace[trace.length - 1];
