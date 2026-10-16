@@ -47,8 +47,8 @@ function createToolRunner(execTool, signal) {
       const result = await execTool(name, args || {});
       const summary = rText(result);
       if ((result && typeof result === 'object' && (result.ok === false || result.success === false || result.error))
-        || /\\b(?:error|denied|failed|failure|could not|couldn.t|unknown tool|tool call rejected|invalid|not found|does not exist|permission denied)\\b/i.test(summary)
-        || /\\bHTTP [45]\\d\\d\\b/i.test(summary)) failed.add(key);
+        || /\b(?:error|denied|failed|failure|could not|couldn.t|unknown tool|tool call rejected|invalid|not found|does not exist|permission denied)\b/i.test(summary)
+        || /\bHTTP [45]\\d\\d\b/i.test(summary)) failed.add(key);
       return result;
     } catch (error) {
       if (signal && signal.aborted) throw error;
