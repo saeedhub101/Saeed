@@ -83,7 +83,7 @@ function llmSection() {
   const out = h('div', { class: 'out muted' });
   const kids = [row('Provider', SEL(c, 'provider', [['anthropic', 'Claude (Anthropic)'], ['openai', 'OpenAI'], ['custom', 'OpenAI-compatible (Ollama, Groq, OpenRouter…)'], ...addonOpts('llm', S.llm.provider)], true))];
   if (c.provider.startsWith('addon:')) {
-    kids.push(note('Local brain is a separate download, not part of Saeed's installer. Install it from Add-ons, then the GGUF model downloads on first use into Saeed's user-data folder. It runs locally without a cloud API key. Larger models usually understand Arabic and choose tools better but need more RAM. Cloud choices (OpenAI, Claude, or an OpenAI-compatible service such as Groq/OpenRouter/Ollama) remain optional alternatives.'), openAddons());
+    kids.push(note("Local brain is a separate download, not part of Saeed's installer. Install it from Add-ons, then the GGUF model downloads on first use into Saeed's user-data folder. It runs locally without a cloud API key. Larger models usually understand Arabic and choose tools better but need more RAM. Cloud choices (OpenAI, Claude, or an OpenAI-compatible service such as Groq/OpenRouter/Ollama) remain optional alternatives."), openAddons());
   } else if (c.provider === 'anthropic') {
     const dl = h('datalist', { id: 'claude-models' }, ['claude-sonnet-5', 'claude-haiku-4-5-20251001', 'claude-opus-5'].map((m) => h('option', { value: m })));
     const model = T(c.anthropic, 'model'); model.setAttribute('list', 'claude-models');
