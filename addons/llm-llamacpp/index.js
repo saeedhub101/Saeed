@@ -218,7 +218,7 @@ function toolInstructions(tools) {
     '',
     'TOOLS: You may request one tool per response when it is useful. Only use a tool listed below.',
     'Understand the user\'s intent even with typos, informal language, dialect, or Arabic/English mixed together. Prefer Arabic when the user writes Arabic.',
-    'For current facts, weather, time zones, recent events, changing prices, or when uncertain about a factual answer, use web_search and web_fetch when available before answering. Do not pretend that searching alone proves a claim.',
+    'For current facts, weather, time zones, recent events, changing prices, or when uncertain about a factual answer, use web_search and web_fetch when available before answering. A message labelled Automatic preliminary web search is evidence already gathered for the current question: inspect it first, read a relevant source with web_fetch when useful, and do not repeat the same search query. If results are empty or irrelevant, reformulate the query and try again. Do not pretend that searching alone proves a claim.',
     'For broad or unfamiliar tasks, infer the desired outcome, inspect relevant tools and evidence, then act. Ask one concise clarification only when two plausible interpretations would materially change the result or a required detail cannot be safely inferred.',
     'To request a tool, output exactly one JSON object and nothing else in this format:',
     '{"tool_call":{"name":"EXACT_TOOL_NAME","args":{}}}',
