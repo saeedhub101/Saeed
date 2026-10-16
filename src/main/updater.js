@@ -9,7 +9,8 @@ function repository(value) {
     .replace(/^https?:\/\/github\.com\//i, '')
     .replace(/\.git$/i, '')
     .replace(/^\/+|\/+$/g, '');
-  const parts = candidate.split('/');
+  const normalized = /^saeedhub\/Saeed$/i.test(candidate) ? DEFAULT_REPOSITORY : candidate;
+  const parts = normalized.split('/');
   if (parts.length !== 2 || !parts.every((part) => /^[A-Za-z0-9_.-]+$/.test(part))) {
     throw new Error('Invalid update repository. Use owner/name, for example saeedhub101/Saeed.');
   }
