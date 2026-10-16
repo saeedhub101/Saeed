@@ -40,6 +40,19 @@ for (const id of fs.readdirSync(path.join(root, 'addons'))) {
 }
 if (!bad) console.log('  ok   add-on manifests');
 
+/* 2b. agent orchestration must recover from tool errors and synthesize the last tool result. */
+try {
+  const agentSource = fs.readFileSync(path.join(root, 'src/main/llm.js'), 'utf8');
+  const providers = [
+    ['Anthropic', /const final = await anthropicCall[\\s\\S]*?tools: \\[\\]/],
+    ['OpenAI-compatible', /const final = await openaiCall[\\s\\S]*?tools: \\[\\]/],
+    ['local add-on', /const final = await addons\\.callProvider[\\s\\S]*?tools: \\[\\]/],
+  ];
+  for (const [name, pattern] of providers) if (!pattern.test(agentSource)) fail(name + ' agent has no final synthesis call after the tool-step limit');
+  if (!agentSource.includes('function createToolRunner')) fail('agent does not guard against repeated failed tool calls');
+  if (!agentSource.includes('if (signal && signal.aborted) throw error')) fail('agent swallows cancellation while recovering from tool errors');
+} catch (e) { fail('agent orchestration checks could not run: ' + e.message); }
+
 /* 2c. failed-call guard is exercised in an async helper check launched before process exit. */
 try {
   const runnerFactory = require(path.join(root, 'src/main/llm.js'))._test.createToolRunner;
