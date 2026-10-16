@@ -1,7 +1,7 @@
 {
   "id": "llm-llamacpp",
   "name": "Local brain (Qwen / Llama / any GGUF)",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "Saeed",
   "category": "brain",
   "bundle": "none",
