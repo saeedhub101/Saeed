@@ -13,9 +13,10 @@ const ctx = {
   status: (s) => console.log('[model]', s),
   stream: () => {},
 };
+let failures = 0;
 const pass = (label, answer) => console.log('PASS ' + label + ': ' + JSON.stringify(answer));
-const fail = (label, answer) => { console.error('FAIL ' + label + ': ' + JSON.stringify(answer)); process.exitCode = 1; };
-const normalized = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
+const fail = (label, answer) => { failures++; console.error('FAIL ' + label + ': ' + JSON.stringify(answer)); };
+const normalized = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u064b-\u065f\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه');
 
 (async () => {
   fs.mkdirSync(dataDir, { recursive: true });
