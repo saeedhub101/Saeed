@@ -66,6 +66,15 @@ try {
   if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-5.1').reasoning_effort !== 'high') fail('GPT-5 reasoning effort was not enabled');
   if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-5-mini').reasoning_effort !== 'high') fail('GPT-5 mini reasoning effort was not enabled');
   if (Object.keys(llmTest.requestOptions(reasoningSettings, 'custom', 'gpt-5.1')).length) fail('reasoning parameters leaked to an arbitrary OpenAI-compatible provider');
+  const updaterTest = require(path.join(root, 'src/main/updater.js'))._test;
+  const defaultFeed = updaterTest.repository('');
+  if (defaultFeed.owner !== 'saeedhub101' || defaultFeed.repo !== 'Saeed') fail('updater does not default to the official Saeed release repository');
+  const configuredFeed = updaterTest.repository('https://github.com/example/saeed.git');
+  if (configuredFeed.owner !== 'example' || configuredFeed.repo !== 'saeed') fail('updater does not normalize configured GitHub repository URLs');
+  for (const invalidRepo of ['https://example.com/evil', 'owner', 'owner/name/extra']) {
+    let rejected = false; try { updaterTest.repository(invalidRepo); } catch { rejected = true; }
+    if (!rejected) fail('updater accepted an invalid GitHub repository path: ' + invalidRepo);
+  }
   const defaults = require(path.join(root, 'src/main/settings.js')).DEFAULT_SETTINGS;
   if (defaults.llm.anthropic.model !== 'claude-sonnet-5' || defaults.llm.openai.model !== 'gpt-5.1') fail('default brain models are not current reasoning-capable choices');
 } catch (e) { fail('agent orchestration checks could not run: ' + e.message); }
