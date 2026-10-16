@@ -66,6 +66,8 @@ try {
   if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-5.1').reasoning_effort !== 'high') fail('GPT-5 reasoning effort was not enabled');
   if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-5-mini').reasoning_effort !== 'high') fail('GPT-5 mini reasoning effort was not enabled');
   if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-6-astra').reasoning_effort !== 'high') fail('GPT-6 reasoning effort was not enabled');
+  if (llmTest.requestOptions({ llm: { reasoningEffort: 'max' } }, 'openai', 'gpt-6-astra').reasoning_effort !== 'max') fail('GPT-6 maximum reasoning effort was not enabled');
+  if (llmTest.requestOptions({ llm: { reasoningEffort: 'max' } }, 'openai', 'gpt-5.1').reasoning_effort !== 'high') fail('unsupported maximum reasoning leaked to GPT-5');
   if (Object.keys(llmTest.requestOptions(reasoningSettings, 'custom', 'gpt-5.1')).length) fail('reasoning parameters leaked to an arbitrary OpenAI-compatible provider');
   const updaterTest = require(path.join(root, 'src/main/updater.js'))._test;
   const defaultFeed = updaterTest.repository('');
@@ -79,6 +81,7 @@ try {
   const defaults = require(path.join(root, 'src/main/settings.js')).DEFAULT_SETTINGS;
   if (defaults.llm.anthropic.model !== 'claude-sonnet-5' || defaults.llm.openai.model !== 'gpt-6-astra') fail('default brain models are not current reasoning-capable choices');
   if (defaults.llm.provider !== 'openai') fail('new Saeed installs do not default to the GPT-6 brain');
+  if (defaults.llm.reasoningEffort !== 'max') fail('new Saeed installs do not default to maximum GPT-6 reasoning');
   if (defaults.updates.repo !== 'saeedhub101/Saeed') fail('default updater repository is not the official Saeed repository');
 } catch (e) { fail('agent orchestration checks could not run: ' + e.message); }
 
