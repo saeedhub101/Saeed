@@ -84,6 +84,14 @@ try {
   if (selected.some((x) => x.includes('Excel reports'))) fail('memory retrieval included an unrelated fact ahead of relevant context');
 } catch (e) { fail('memory retrieval checks could not run: ' + e.message); }
 
+/* 2f. Arabic error results are treated as failures rather than successful tool evidence. */
+try {
+  const brainSource = fs.readFileSync(path.join(root, 'src/main/brain.js'), 'utf8');
+  const agentSource = fs.readFileSync(path.join(root, 'src/main/llm.js'), 'utf8');
+  if (!brainSource.includes('لم يتم العثور|لم أتمكن|تعذر|مرفوض|غير موجود|لا يوجد|لم ينجح|فشل|خطأ|رفض')) fail('brain does not classify common Arabic tool failures');
+  if (!agentSource.includes('لم يتم العثور|لم أتمكن|تعذر|مرفوض|غير موجود|لا يوجد|لم ينجح|فشل|خطأ|رفض')) fail('agent retry guard does not recognize common Arabic tool failures');
+} catch (e) { fail('Arabic failure-classification checks could not run: ' + e.message); }
+
 /* 2e. skill retrieval normalizes Arabic and ranks directly relevant workflows above vague matches. */
 try {
   const scoreSkill = require(path.join(root, 'src/main/skills.js'))._test.scoreSkill;
