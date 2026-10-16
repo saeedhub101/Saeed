@@ -312,9 +312,9 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
   const h = load();
   const mine = { role: 'user', text: images.length ? `${text} [image attached]` : text, t: Date.now() };
   h.push(mine); save();
-  const recent = h.slice(-(settings.llm.maxTurns || 12) * 2).map((m) => ({ ...m }));
+  const recentStart = Math.max(0, h.length - (settings.llm.maxTurns || 12) * 2);
+  const recent = h.slice(recentStart).map((m) => ({ ...m }));
   while (recent.length && recent[0].role !== 'user') recent.shift();
-  const recentStart = Math.max(0, h.length - recent.length);
   const recalledHistory = historyContext(h.slice(0, recentStart), text);
   if (images.length && recent.length) { const last = recent[recent.length - 1]; last.text = text; last.images = images; }
   const customPrompt = String(settings.llm.systemPrompt || '').trim();
