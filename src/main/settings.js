@@ -11,9 +11,10 @@ const DEFAULT_SETTINGS = {
   llm: {
     provider: 'anthropic',             // anthropic | openai | custom
     maxTurns: 12,
+    reasoningEffort: 'high',          // low | medium | high; used by supported OpenAI reasoning models
     systemPrompt: '',
-    anthropic: { model: 'claude-sonnet-5-5' },
-    openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
+    anthropic: { model: 'claude-sonnet-5' },
+    openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.1' },
     custom: { baseUrl: 'http://localhost:11434/v1', model: 'llama3.1' },
   },
   tts: {
