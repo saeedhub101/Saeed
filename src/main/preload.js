@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('api', {
   onCommand: (cb) => on('command', cb),
   onService: (cb) => on('service', cb),
   dragStart: call('win:dragstart'),
+  cursorInfo: call('win:cursor'),
   dragMove: send('win:dragmove'),
   setIgnoreMouse: send('win:ignore'),
   // voice + brain

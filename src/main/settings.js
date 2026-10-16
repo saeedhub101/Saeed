@@ -47,21 +47,25 @@ const DEFAULT_SETTINGS = {
   },
   procedures: [],                      // [{ name, keywords: 'insurance, policy', text }] how to work in your company systems
   // What Saeed may do (caps) and where (locations). Modes: ask | allow | deny.
+  // Shipped wide open, by this user's explicit choice: Saeed should not be stopped by default, this is a personal
+  // assistant on the owner's own PC. The one exception left is "dangerous" below - wiping a whole drive or the
+  // Windows folder - which needs its own separate switch so one bad command can't erase the system. Settings →
+  // Permissions has a one-click "Restore safe restrictions" button for anyone who wants the cautious defaults back.
   permissions: {
     caps: {
-      'files.read': 'allow', 'files.write': 'ask', 'files.delete': 'ask', 'files.deletePermanent': 'deny',
-      'apps.open': 'allow', 'system.run': 'ask', 'desktop.control': 'ask', 'network': 'ask',
-      'web.read': 'allow', 'web.send': 'ask', 'browser.control': 'ask', 'data.read': 'ask', 'data.write': 'ask',
+      'files.read': 'allow', 'files.write': 'allow', 'files.delete': 'allow', 'files.deletePermanent': 'allow',
+      'apps.open': 'allow', 'system.run': 'allow', 'desktop.control': 'allow', 'network': 'allow',
+      'web.read': 'allow', 'web.send': 'allow', 'browser.control': 'allow', 'data.read': 'allow', 'data.write': 'allow',
     },
-    defaultLocation: 'ask',            // places that match no rule below
+    defaultLocation: 'allow',          // places that match no rule below
     locations: [
       { path: '~/Documents', mode: 'allow' }, { path: '~/Desktop', mode: 'allow' }, { path: '~/Downloads', mode: 'allow' }, { path: '~/Pictures', mode: 'allow' },
       { path: '%OneDrive%/Documents', mode: 'allow' }, { path: '%OneDrive%/Desktop', mode: 'allow' },
-      { path: '%SystemRoot%', mode: 'deny' }, { path: '%ProgramFiles%', mode: 'deny' }, { path: '%ProgramFiles(x86)%', mode: 'deny' },
-      { path: '%ProgramData%', mode: 'deny' }, { path: '%APPDATA%', mode: 'deny' }, { path: '%LOCALAPPDATA%', mode: 'deny' },
+      { path: '%SystemRoot%', mode: 'allow' }, { path: '%ProgramFiles%', mode: 'allow' }, { path: '%ProgramFiles(x86)%', mode: 'allow' },
+      { path: '%ProgramData%', mode: 'allow' }, { path: '%APPDATA%', mode: 'allow' }, { path: '%LOCALAPPDATA%', mode: 'allow' },
     ],
     grants: {},                        // { addonId: { 'files.write': true } } set by "Always allow"
-    dangerous: false,                  // allow deleting drive roots, the Windows folder and the user profile folder
+    dangerous: false,                  // allow deleting drive roots, the Windows folder and the user profile folder - its own switch, not part of the reset below
   },
   updates: { repo: '', autoCheck: true },
   ui: { language: 'en' },

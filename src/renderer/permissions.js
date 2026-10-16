@@ -94,12 +94,23 @@ function logSection() {
     h('table', { class: 'log' }, logBody));
 }
 
+function presetButtons() {
+  return h('div', { class: 'btns' },
+    h('button', { class: 'btn', onclick: () => { if (confirm('Give Saeed full access everywhere, with no prompts (except the Danger zone below)?')) set(() => { P = structuredClone(info.defaults); }); } }, 'Grant full access'),
+    h('button', { class: 'btn danger', onclick: () => { if (confirm('Restore the cautious, ask-before-acting defaults?')) set(() => { P = structuredClone(info.safePreset); }); } }, 'Restore safe restrictions'));
+}
+
 let timer = 0;
 function render() {
   const y = window.scrollY;
   clearInterval(timer);
-  root.replaceChildren(capsSection(), placesSection(), grantsSection(), testSection(), dangerSection(), logSection(),
-    h('div', { class: 'btns' }, h('button', { class: 'btn danger', onclick: () => { if (confirm('Reset all permissions to the safe defaults?')) set(() => { P = structuredClone(info.defaults); }); } }, 'Reset all to defaults')));
+  const asksCount = Object.values(P.caps).filter((v) => v !== 'allow').length + P.locations.filter((r) => r.mode !== 'allow').length + (P.defaultLocation !== 'allow' ? 1 : 0);
+  root.replaceChildren(
+    h('div', { class: 'box' }, h('div', { class: 'cap' },
+      h('div', { style: 'flex:1' }, h('div', { class: 't' }, asksCount ? `${asksCount} thing(s) still ask or are blocked` : 'Full access - nothing asks or is blocked'),
+        h('div', { class: 'muted' }, 'except the Danger zone below, which always has its own switch')),
+      presetButtons())),
+    capsSection(), placesSection(), grantsSection(), testSection(), dangerSection(), logSection());
   timer = setInterval(() => { if (!document.hidden) paintLog(); }, 4000);
   window.scrollTo(0, y);
 }

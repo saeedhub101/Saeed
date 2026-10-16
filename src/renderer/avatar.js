@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Character } from '../shared/character.js';
 import { Voice, resample } from './voice.js';
+import { Behavior } from './behavior.js';
 
 const api = window.api;
 const canvas = document.getElementById('c');
@@ -87,8 +88,9 @@ api.onCommand((cmd, args) => {
 });
 
 /* ---------- voice: microphone, speaking, lip-sync ---------- */
-let rtRate = 24000, rtBuf = [], rtLen = 0, lastActive = performance.now();
+let rtRate = 24000, rtBuf = [], rtLen = 0, lastActive = performance.now(), thinking = false;
 const markActive = () => { lastActive = performance.now(); };
+const behavior = new Behavior(ch, api);
 const voice = new Voice(() => cfg.settings, {
   onRaw: (data, rate, gain) => {
     const r = resample(data, rate, rtRate, gain);
@@ -146,10 +148,10 @@ api.onPipeline(async (ev) => {
   const a = cfg.settings.audio;
   markActive();
   switch (ev.type) {
-    case 'thinking': ch.command('think'); ch.face.lookAt(0.6, 0.5, 1.8); break;
+    case 'thinking': thinking = true; ch.command('think'); ch.face.lookAt(0.6, 0.5, 1.8); break;
     case 'intent': ch.command(ev.name); break;
     case 'speak-start':
-      speakInfo = ev; voice.beginStream();
+      thinking = false; speakInfo = ev; voice.beginStream();
       if (ev.text && (ev.muted || a.bubbleAlways)) showBubble(ev.text, 0);
       if (ev.muted) ch.command('talk', { hold: true });
       break;
@@ -162,7 +164,7 @@ api.onPipeline(async (ev) => {
         setTimeout(() => { ch.stopActions(); setTimeout(hideBubble, 1500); }, ms);
       } else voice.markStreamDone();
       break;
-    case 'cancel': voice.stopSpeaking(); ch.face.stopSpeech(); ch.stopActions(); hideBubble(); break;
+    case 'cancel': thinking = false; voice.stopSpeaking(); ch.face.stopSpeech(); ch.stopActions(); hideBubble(); break;
     case 'adhan':
       showBubble(ev.text, 8000);
       if (ev.pose) ch.command('adhan', { hold: true });
@@ -230,13 +232,15 @@ function frame(now) {
   acc += (now - last) / 1000;
   last = now;
   // Full speed while something happens, a low rate while Saeed just stands there.
-  const busy = performance.now() - lastActive < 8000 || voice.speaking || ch.actions.length > 0;
+  const engaged = voice.speaking || ch.face.listening || thinking || ch.actions.length > 0;
+  const busy = performance.now() - lastActive < 8000 || engaged;
   const idleFps = (cfg.settings.performance && cfg.settings.performance.idleFps) || 12;
   const fps = busy ? (cfg.fps || 30) : performance.now() - lastActive > 60000 ? Math.min(6, idleFps) : idleFps;   // resting for a minute: even slower
   if (acc < 1 / fps - 0.002) return;
   const dt = Math.min(acc, 0.1);
   acc = 0;
   ch.update(dt);
+  behavior.tick({ dtSec: dt, idleMs: now - lastActive, busy: engaged });
   renderer.render(scene, camera);
   hitTest();
   placeBubble();

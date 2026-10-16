@@ -183,7 +183,24 @@ function denyList() {
   return out;
 }
 
-const info = () => ({ caps: CAPS, defaults: require('./settings').DEFAULT_SETTINGS.permissions });
+// A separate, hard-coded cautious preset - independent of DEFAULT_SETTINGS (which ships wide open) - so
+// "Restore safe restrictions" always means the same thing, for any install at any time.
+const SAFE_PRESET = {
+  caps: {
+    'files.read': 'allow', 'files.write': 'ask', 'files.delete': 'ask', 'files.deletePermanent': 'deny',
+    'apps.open': 'allow', 'system.run': 'ask', 'desktop.control': 'ask', 'network': 'ask',
+    'web.read': 'allow', 'web.send': 'ask', 'browser.control': 'ask', 'data.read': 'ask', 'data.write': 'ask',
+  },
+  defaultLocation: 'ask',
+  locations: [
+    { path: '~/Documents', mode: 'allow' }, { path: '~/Desktop', mode: 'allow' }, { path: '~/Downloads', mode: 'allow' }, { path: '~/Pictures', mode: 'allow' },
+    { path: '%OneDrive%/Documents', mode: 'allow' }, { path: '%OneDrive%/Desktop', mode: 'allow' },
+    { path: '%SystemRoot%', mode: 'deny' }, { path: '%ProgramFiles%', mode: 'deny' }, { path: '%ProgramFiles(x86)%', mode: 'deny' },
+    { path: '%ProgramData%', mode: 'deny' }, { path: '%APPDATA%', mode: 'deny' }, { path: '%LOCALAPPDATA%', mode: 'deny' },
+  ],
+  grants: {}, dangerous: false,
+};
+const info = () => ({ caps: CAPS, defaults: require('./settings').DEFAULT_SETTINGS.permissions, safePreset: SAFE_PRESET });
 
 /* ---------- activity log ---------- */
 function audit(e) { fs.appendFile(logFile(), JSON.stringify({ t: new Date().toISOString(), ...e }) + '\n', () => {}); }

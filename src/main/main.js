@@ -296,6 +296,14 @@ ipcMain.on('studio:open', (_e, tab) => openStudio(tab));
 ipcMain.on('win:open', (_e, kind) => openWin(kind));
 ipcMain.on('command', (_e, cmd, args) => sendCommand(cmd, args));
 ipcMain.handle('win:dragstart', (e) => BrowserWindow.fromWebContents(e.sender)?.getBounds());
+// Where the real OS cursor is relative to this window's center, for the character's idle eye glances.
+ipcMain.handle('win:cursor', (e) => {
+  const w = BrowserWindow.fromWebContents(e.sender);
+  if (!w || w.isDestroyed()) return null;
+  const b = w.getBounds(), p = screen.getCursorScreenPoint();
+  const dx = p.x - (b.x + b.width / 2), dy = p.y - (b.y + b.height / 2);
+  return { dx, dy, near: Math.hypot(dx, dy) < Math.max(b.width, b.height) * 2.2 };
+});
 ipcMain.on('win:dragmove', (e, x, y) => {
   BrowserWindow.fromWebContents(e.sender)?.setBounds({ x: Math.round(x), y: Math.round(y), width: AV.w, height: AV.h });
 });
