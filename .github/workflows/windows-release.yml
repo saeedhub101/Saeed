@@ -3,8 +3,7 @@
 name: Windows Build and Release
 
 on:
-  push:
-    branches: [main]
+  # Releases are manual only; ordinary commits must never publish an installer.
   workflow_dispatch:
 
 permissions:
