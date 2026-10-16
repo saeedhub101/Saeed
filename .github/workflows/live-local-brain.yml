@@ -1,0 +1,43 @@
+name: Live local brain answer test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/test-local-brain.js'
+      - 'addons/llm-llamacpp/**'
+      - '.github/workflows/live-local-brain.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: saeed-live-local-brain
+  cancel-in-progress: false
+
+jobs:
+  qwen-answer-quality:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: addons/llm-llamacpp/package.json
+      - name: Install the real local model runtime
+        shell: pwsh
+        run: |
+          Push-Location addons/llm-llamacpp
+          npm install --omit=dev --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw "Local model runtime installation failed." }
+          Pop-Location
+      - name: Run real Qwen3-4B answer and evidence checks
+        shell: pwsh
+        run: |
+          node scripts/test-local-brain.js
+          if ($LASTEXITCODE -ne 0) { throw "The real local brain failed its answer-quality checks." }
