@@ -147,11 +147,17 @@ function schemaError(value, schema, pathName = 'args') {
 
 function parseToolCall(text, tools) {
   const allowed = new Map((Array.isArray(tools) ? tools : []).map((t) => [t.name, t]));
-  for (const candidate of jsonCandidates(text)) {
+  const source = String(text || '').trim();
+  const wrappedFormat = /<tool_call>|\x60\x60\x60/i.test(source);
+  for (const candidate of jsonCandidates(source)) {
     let value;
     try { value = JSON.parse(candidate); } catch { continue; }
-    const call = value && (value.tool_call || value.toolCall || value.function_call || value.function
-      || (Array.isArray(value.tool_calls) && value.tool_calls[0] && (value.tool_calls[0].function || value.tool_calls[0])) || value);
+    const wrapped = value && (value.tool_call || value.toolCall || value.function_call || value.function
+      || (Array.isArray(value.tool_calls) && value.tool_calls[0] && (value.tool_calls[0].function || value.tool_calls[0])));
+    // A bare object embedded in ordinary prose is not a command. Require the documented wrapper,
+    // a fenced/tagged tool block, or a response that consists entirely of the JSON object.
+    if (!wrapped && candidate !== source && !wrappedFormat) continue;
+    const call = wrapped || value;
     const name = call && (call.name || call.tool);
     if (typeof name !== 'string' || !allowed.has(name)) continue;
     let args = call.args && typeof call.args === 'object' && !Array.isArray(call.args) ? call.args
