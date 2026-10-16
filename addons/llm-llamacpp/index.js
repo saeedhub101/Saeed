@@ -145,10 +145,28 @@ module.exports = {
           else history.push({ type: 'user', text: `Tool result (${m.name || m.toolCallId || 'tool'}):\n${m.text}` });
         }
         session.setChatHistory(history);
-        const text = String(await session.prompt(last.role === 'tool' ? `Tool result (${last.name || last.toolCallId || 'tool'}):\n${last.text}\nContinue the task using this result.` : last.text, {
-          maxTokens: Number(ctx.settings.maxTokens) || 600,
+        const maxTokens = Math.max(64, Math.min(4096, Number(ctx.settings.maxTokens) || 600));
+        let text = String(await session.prompt(last.role === 'tool' ? `Tool result (${last.name || last.toolCallId || 'tool'}):\n${last.text}\nContinue the task using this result.` : last.text, {
+          maxTokens,
         })).trim();
-        const toolCalls = parseToolCall(text, tools);
+        let toolCalls = parseToolCall(text, tools);
+        // Retry once when the model clearly attempted a tool call but produced malformed JSON or arguments.
+        // Do not expose raw control JSON to the user if the retry also fails.
+        if (!toolCalls.length && Array.isArray(tools) && tools.length && /tool[_ ]?call|<tool_call>|function_call/i.test(text)) {
+          const repairPrompt = [
+            'Your previous response attempted a tool call but it was invalid and was not executed.',
+            'Choose only a tool listed below. Include every required argument with the correct type and allowed enum value.',
+            'Return only this JSON shape: {"tool_call":{"name":"EXACT_TOOL_NAME","args":{}}}',
+            'Available tools and schemas:', JSON.stringify(tools),
+            'Invalid response to correct:', text.slice(0, 2000),
+          ].join('\n');
+          const repaired = String(await session.prompt(repairPrompt, { maxTokens: Math.min(maxTokens, 400) })).trim();
+          toolCalls = parseToolCall(repaired, tools);
+          if (toolCalls.length) return { text: '', toolCalls };
+          text = /[\u0600-\u06FF]/.test(last.text || '') || /[\u0600-\u06FF]/.test(text)
+            ? 'لم أتمكن من تنفيذ الطلب بأمان لأن النموذج المحلي أنشأ استدعاء أداة غير صالح. أعد صياغة الطلب أو اختر نموذجًا أقوى.'
+            : 'I could not safely run that action because the local model produced an invalid tool request. Please rephrase it or choose a stronger model.';
+        }
         if (toolCalls.length) return { text: '', toolCalls };
         if (text) ctx.stream(text);
         return { text, toolCalls: [] };
