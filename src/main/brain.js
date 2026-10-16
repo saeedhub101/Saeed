@@ -280,4 +280,4 @@ const history = () => load().slice(-100);
 function clear() { hist = []; save(); }
 
 const defaultPrompt = () => DEFAULT_PROMPT;
-module.exports = { ask, remember, history, clear, toolDefs, execTool, defaultPrompt, validateToolArgs };
+module.exports = { ask, remember, history, clear, toolDefs, execTool, defaultPrompt, validateToolArgs, confirmationReason };
