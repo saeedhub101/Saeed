@@ -11,6 +11,11 @@ const oContent = (m) => (m.images && m.images.length
   ? [...m.images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mime};base64,${i.data}` } })), { type: 'text', text: m.text }] : m.text);
 const rText = (r) => (typeof r === 'string' ? r : String((r && r.text) || ''));
 const rImage = (r) => (r && typeof r === 'object' && r.image ? r.image : null);
+function parseToolArguments(raw) {
+  const value = JSON.parse(String(raw || '{}'));
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Tool arguments must be a JSON object.');
+  return value;
+}
 const maxSteps = (s) => (s.agent && s.agent.maxSteps) || 25;
 const requestOptions = (settings, provider, model) => (
   provider === 'openai' && /^gpt-5(?:\.|$)/i.test(String(model || ''))
@@ -177,8 +182,7 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
     for (const tc of m.tool_calls) {
       let args;
       try {
-        args = JSON.parse(tc.function.arguments || '{}');
-        if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Tool arguments must be a JSON object.');
+        args = parseToolArguments(tc.function.arguments);
       } catch {
         // Never execute a tool with empty or fabricated arguments after a model JSON error.
         msgs.push({ role: 'tool', tool_call_id: tc.id, content: 'Tool was not executed because the model returned invalid JSON arguments. Retry with valid JSON matching the tool schema.' });
@@ -227,4 +231,4 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
 }
 
 const runAgent = (s, opts) => (s.llm.provider.startsWith('addon:') ? addonAgent(s, opts) : s.llm.provider === 'anthropic' ? anthropicAgent(s, opts) : openaiAgent(s, opts));
-module.exports = { runAgent, _test: { createToolRunner } };
+module.exports = { runAgent, _test: { createToolRunner, parseToolArguments, requestOptions } };
