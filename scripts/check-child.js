@@ -60,6 +60,11 @@ try {
   if (parse('{"tool_call":{"name":"delete_everything","args":{}}}', defs).length) fail('local tool parser accepted an unknown tool');
   if (parse('{"tool_call":{"name":"open_item","args":{}}}', defs).length) fail('local tool parser accepted missing required arguments');
   if (parse('{"tool_call":{"name":"express","args":{"intent":"destroy"}}}', defs).length) fail('local tool parser accepted an invalid enum');
+  const validate = require(path.join(root, 'src/main/brain.js')).validateToolArgs;
+  const nested = { type: 'object', properties: { profile: { type: 'object', properties: { age: { type: 'integer', minimum: 0 } }, required: ['age'] } }, required: ['profile'] };
+  if (!validate({ profile: { age: 8 } }, nested) === null) fail('central tool validator rejected valid nested arguments');
+  if (!validate({ profile: {} }, nested)) fail('central tool validator accepted missing nested required arguments');
+  if (!validate({ profile: { age: -1 } }, nested)) fail('central tool validator accepted out-of-range numeric arguments');
   if (!bad) console.log('  ok   local brain tool-call parsing and schema validation');
 } catch (e) { fail('local brain tool-call tests could not run: ' + e.message); }
 
