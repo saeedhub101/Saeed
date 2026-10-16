@@ -9,7 +9,7 @@ const DEFAULT_SETTINGS = {
     elevenlabs: { model: 'scribe_v1' },
   },
   llm: {
-    provider: 'anthropic',             // anthropic | openai | custom
+    provider: 'openai',                // anthropic | openai | custom
     maxTurns: 12,
     reasoningEffort: 'high',          // low | medium | high; used by supported OpenAI reasoning models
     systemPrompt: '',
