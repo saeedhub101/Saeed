@@ -114,7 +114,7 @@ function selectLocalTools(tools, messages) {
   const characterTask = /\b(character|avatar|animation|pose|emotion|face|viseme|bone|bones|rig|skeleton|glb|wave|dance|gesture|motion)\b/.test(text) || hasAny(['شخصيه', 'حركه', 'عظمه', 'عظام', 'وجه', 'تعابير', 'لوح', 'رقص']);
   const commandTask = /\b(command line|terminal|powershell|cmd(?:\.exe)?|shell script|run a command|execute command|batch file|\.ps1|\.bat)\b/.test(text) || hasAny(['سطر الاوامر', 'طرفيه', 'تيرمنال', 'باورشيل', 'نفذ امر', 'شغل امر', 'شغل سكربت', 'ملف باتش']);
   const networkTask = /\b(api|http request|rest request|endpoint|webhook|fetch url|call an api)\b/.test(text) || hasAny(['واجهه برمجيه', 'طلب http', 'استدعاء api', 'رابط api', 'webhook']);
-  if (fileTask) exact(['list_folder', 'read_file', 'write_file', 'make_folder', 'copy_path', 'move_path', 'delete_path', 'file_info', 'download_file', 'view_image', 'http_request']);
+  if (fileTask) exact(['list_folder', 'read_file', 'write_file', 'make_folder', 'copy_path', 'move_path', 'delete_path', 'file_info', 'download_file', 'view_image']);
   if (sheetTask) prefix(['excel__', 'charts__']);
   if (wordTask) prefix(['word__']);
   if (pdfTask) prefix(['pdf__', 'ocr__']);
