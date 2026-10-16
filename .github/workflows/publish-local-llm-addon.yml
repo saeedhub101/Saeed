@@ -1,0 +1,98 @@
+name: Publish optional local LLM add-on
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'addons/llm-llamacpp/**'
+      - '.github/workflows/publish-local-llm-addon.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-local-llm-addon
+  cancel-in-progress: false
+
+jobs:
+  package-and-publish:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: addons/llm-llamacpp/package.json
+
+      - name: Install add-on runtime (not the desktop app)
+        shell: pwsh
+        run: |
+          Push-Location addons/llm-llamacpp
+          npm install --omit=dev --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw "Local LLM dependency installation failed." }
+          node -e "require('./package.json'); console.log('Local LLM package metadata OK')"
+          Pop-Location
+
+      - name: Package external add-on
+        shell: pwsh
+        run: |
+          $manifest = Get-Content addons/llm-llamacpp/addon.json -Raw | ConvertFrom-Json
+          $name = "llm-llamacpp-$($manifest.version).zip"
+          if (Test-Path $name) { Remove-Item $name -Force }
+          Compress-Archive -Path "addons/llm-llamacpp/*" -DestinationPath $name -CompressionLevel Optimal
+          $hash = (Get-FileHash $name -Algorithm SHA256).Hash.ToLowerInvariant()
+          $size = (Get-Item $name).Length
+          "ADDON_FILE=$name" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ADDON_SHA256=$hash" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ADDON_SIZE=$size" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ADDON_VERSION=$($manifest.version)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Create or update stable add-on release asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view addons --repo ${{ github.repository }} 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create addons --repo ${{ github.repository }} --title "Saeed Add-ons" --notes "Optional downloadable add-ons for Saeed. Assets are versioned by add-on." --prerelease
+            if ($LASTEXITCODE -ne 0) { throw "Could not create the add-ons release." }
+          }
+          gh release upload addons "$env:ADDON_FILE" --repo ${{ github.repository }} --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Could not upload the local LLM add-on asset." }
+
+      - name: Update online add-on registry
+        shell: pwsh
+        run: |
+          $entry = @{
+            id = "llm-llamacpp"
+            name = "Local brain (Qwen / Llama)"
+            version = $env:ADDON_VERSION
+            description = "Optional local LLM runtime. Downloaded separately; the GGUF model downloads on first use."
+            author = "Saeed"
+            permissions = @()
+            category = "brain"
+            bundle = "none"
+            file = $env:ADDON_FILE
+            size = [long]$env:ADDON_SIZE
+            sha256 = $env:ADDON_SHA256
+            url = "https://github.com/${{ github.repository }}/releases/download/addons/$env:ADDON_FILE"
+          }
+          @{ addons = @($entry) } | ConvertTo-Json -Depth 8 | Set-Content addons/registry.json -Encoding utf8
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add addons/registry.json
+          git diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git commit -m "Update optional local LLM add-on registry"
+            git push origin HEAD:main
+            if ($LASTEXITCODE -ne 0) { throw "Could not publish the updated add-on registry." }
+          }
