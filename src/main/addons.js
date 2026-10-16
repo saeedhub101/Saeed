@@ -229,8 +229,9 @@ function installZip(zipPath) {
 }
 
 async function download(entry, onProgress) {
-  const res = await fetch(entry.url);
+  const res = await fetch(entry.url, { cache: 'no-store' });
   if (!res.ok) throw new Error('Download failed: ' + res.status);
+  if (!res.body) throw new Error('Download failed: the server returned an empty response.');
   const total = Number(res.headers.get('content-length')) || entry.size || 0;
   const tmp = path.join(app.getPath('temp'), `saeed-${entry.id}-${Date.now()}.zip`);
   const out = fs.createWriteStream(tmp);
@@ -238,16 +239,37 @@ async function download(entry, onProgress) {
   let got = 0;
   const t0 = Date.now();
   const reader = res.body.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    out.write(value); hash.update(value); got += value.length;
-    const s = (Date.now() - t0) / 1000 || 1;
-    onProgress({ id: entry.id, transferred: got, total, bps: got / s, eta: total ? (total - got) / (got / s) : 0 });
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      hash.update(value);
+      got += value.length;
+      if (!out.write(Buffer.from(value))) await new Promise((resolve, reject) => {
+        out.once('drain', resolve);
+        out.once('error', reject);
+      });
+      const elapsed = (Date.now() - t0) / 1000 || 1;
+      const bps = got / elapsed;
+      if (onProgress) onProgress({ id: entry.id, transferred: got, total, bps, eta: total && bps ? Math.max(0, total - got) / bps : 0 });
+    }
+    await new Promise((resolve, reject) => {
+      out.once('error', reject);
+      out.end(resolve);
+    });
+    const actualHash = hash.digest('hex').toLowerCase();
+    const expectedHash = String(entry.sha256 || '').trim().toLowerCase();
+    if (expectedHash && actualHash !== expectedHash) {
+      throw new Error(`Add-on checksum mismatch. Expected ${expectedHash}; received ${actualHash}. The file was not installed. Refresh the add-on list and retry.`);
+    }
+    return installZip(tmp);
+  } catch (error) {
+    try { await reader.cancel(); } catch { /* stream already closed */ }
+    try { out.destroy(); } catch { /* stream already closed */ }
+    throw error;
+  } finally {
+    fs.rmSync(tmp, { force: true });
   }
-  await new Promise((r) => out.end(r));
-  if (entry.sha256 && hash.digest('hex') !== String(entry.sha256).toLowerCase()) { fs.rmSync(tmp, { force: true }); throw new Error('The downloaded file does not match its checksum. Not installed.'); }
-  try { return installZip(tmp); } finally { fs.rmSync(tmp, { force: true }); }
 }
 
 function remove(id) {
