@@ -152,7 +152,9 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
   const recent = h.slice(-(settings.llm.maxTurns || 12) * 2).map((m) => ({ ...m }));
   while (recent.length && recent[0].role !== 'user') recent.shift();
   if (images.length && recent.length) { const last = recent[recent.length - 1]; last.text = text; last.images = images; }
-  const system = (settings.llm.systemPrompt || DEFAULT_PROMPT) + procedureText(settings, text) + (settings.memory && settings.memory.enabled ? memory.promptText() : '') + skills.promptText(text) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
+  const customPrompt = String(settings.llm.systemPrompt || '').trim();
+  // A custom prompt should add preferences, not silently remove Saeed's core tool-use and verification rules.
+  const system = DEFAULT_PROMPT + (customPrompt ? `\n\nAdditional user instructions (apply when compatible with the core rules):\n${customPrompt}` : '') + procedureText(settings, text) + (settings.memory && settings.memory.enabled ? memory.promptText() : '') + skills.promptText(text) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
   const trace = []; let calledLearn = false;
   try {
     const reply = await llm.runAgent(settings, {
