@@ -45,7 +45,9 @@ function loadCfg() {
   if (cfg.settings.llm.anthropic.model === 'claude-sonnet-5-5') cfg.settings.llm.anthropic.model = 'claude-sonnet-5';
   if (cfg.settings.llm.openai.model === 'gpt-4o-mini') cfg.settings.llm.openai.model = 'gpt-6-astra';
   if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(cfg.settings.llm.reasoningEffort)) cfg.settings.llm.reasoningEffort = 'max';
-  if (!String(cfg.settings.updates.repo || '').trim()) cfg.settings.updates.repo = 'saeedhub101/Saeed';
+  // Migrate the old/incorrect owner so both Check for Updates and the add-on registry use the published repository.
+  const updateRepo = String(cfg.settings.updates.repo || '').trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '');
+  if (!updateRepo || /^saeedhub\/Saeed$/i.test(updateRepo) || /^saeedhub101\/Saeed$/i.test(updateRepo)) cfg.settings.updates.repo = 'saeedhub101/Saeed';
   if (String(cfg.settings.stt.provider) === 'local') cfg.settings.stt.provider = 'addon:whisper-local';
   // Older installs defaulted to cloud Whisper. If no OpenAI credential exists, migrate that default
   // to the bundled local recognizer instead of asking for an API key just to use the microphone.
