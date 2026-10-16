@@ -2,6 +2,7 @@
 // The brain: one shared conversation history (voice + chat) and the tool-using LLM loop.
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { app } = require('electron');
 const llm = require('./llm');
 const actions = require('./actions');
@@ -51,6 +52,34 @@ const CORE_TOOLS = [
   { name: 'forget_skill', description: 'Delete a learned skill that is no longer right.', schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } },
 ];
 const toolDefs = () => [...CORE_TOOLS, ...core.defs(), ...addons.toolDefs()];
+
+// High-impact actions require an explicit yes for that next action, even if a permission
+// capability is configured to allow the underlying operation.
+function confirmationReason(name, args) {
+  if (name === 'delete_path') return 'deleting "' + String(args.path || 'the selected item') + '"';
+  if (name === 'write_file' && !args.append && args.path) {
+    let target = String(args.path).trim();
+    target = target.replace(/^~(?=[\\/]|$)/, os.homedir());
+    target = target.replace(/%([^%]+)%/g, (m, key) => {
+      const envKey = Object.keys(process.env).find((k) => k.toLowerCase() === key.toLowerCase());
+      return envKey ? process.env[envKey] : m;
+    });
+    const full = path.isAbsolute(target) ? path.resolve(target) : path.resolve(os.homedir(), target);
+    if (fs.existsSync(full)) return 'overwriting the existing file "' + full + '"';
+  }
+  if (name === 'http_request' && !['GET', 'HEAD', 'OPTIONS'].includes(String(args.method || 'GET').toUpperCase())) {
+    return 'sending a ' + String(args.method).toUpperCase() + ' request to ' + String(args.url || 'an external service');
+  }
+  if (name === 'browser__type' && args.submit) return 'submitting the current browser form';
+  if (name === 'database__execute') {
+    const sql = String(args.sql || args.query || args.statement || '');
+    if (/\\b(?:insert|update|delete|drop|alter|truncate|replace|merge|create|grant|revoke)\\b/i.test(sql)) return 'changing database records or schema';
+  }
+  if (name === 'run_command' && /(?:remove-item|\\brm\\s+-rf\\b|\\bformat(?:\.com)?\\b|\\bdiskpart\\b|\\bdel\\s+\/s\\b|\\bshutdown(?:\.exe)?\\b|\\brestart-computer\\b|\\bclear-content\\b)/i.test(String(args.command || ''))) {
+    return 'running a potentially destructive system command';
+  }
+  return '';
+}
 
 // Validate model-generated arguments at the execution boundary, regardless of provider.
 // Provider schemas help the model; this check protects the actual tool dispatcher.
@@ -192,7 +221,7 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
   const customPrompt = String(settings.llm.systemPrompt || '').trim();
   // A custom prompt should add preferences, not silently remove Saeed's core tool-use and verification rules.
   const system = DEFAULT_PROMPT + (customPrompt ? `\n\nAdditional user instructions (apply when compatible with the core rules):\n${customPrompt}` : '') + procedureText(settings, text) + (settings.memory && settings.memory.enabled ? memory.promptText() : '') + skills.promptText(text) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
-  const trace = []; let calledLearn = false;
+  const trace = []; let calledLearn = false, confirmedNextAction = false;
   try {
     const availableTools = toolDefs();
     const reply = await llm.runAgent(settings, {
@@ -202,6 +231,9 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
         if (!def) return 'Tool call rejected: "' + String(name) + '" is not available.';
         const issue = validateToolArgs(args || {}, def.schema);
         if (issue) return 'Tool call rejected because its arguments are invalid: ' + issue + '. Correct the arguments and try again.';
+        const confirmation = confirmationReason(name, args || {});
+        if (confirmation && !confirmedNextAction) return 'Action paused: explicit confirmation is required before ' + confirmation + '. Call confirm_with_user with a clear question, then retry only if the user says yes.';
+        if (confirmation) confirmedNextAction = false;
         if (name === 'learn_skill' || name === 'update_skill') calledLearn = true;
         const traceStart = trace.length;
         const resultText = (value) => typeof value === 'string' ? value : String((value && typeof value.text === 'string' && value.text) || (value && value.error) || '');
@@ -214,6 +246,7 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
         };
         try {
           const result = await execTool(settings, name, args, { onIntent, onTool, signal, trace });
+          if (name === 'confirm_with_user') confirmedNextAction = result === 'The user said yes.';
           const summary = resultText(result);
           const explicitFailure = result && typeof result === 'object'
             && (result.ok === false || result.success === false || Boolean(result.error));
