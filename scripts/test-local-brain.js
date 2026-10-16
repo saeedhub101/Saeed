@@ -2,6 +2,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const Module = require('module');
 
 const root = path.join(__dirname, '..');
 const addon = require(path.join(root, 'addons/llm-llamacpp/index.js'));
@@ -52,13 +53,35 @@ const normalized = (s) => String(s || '').toLowerCase().normalize('NFD').replace
     };
     try {
       delete require.cache[llmPath];
-      const { _test } = require(llmPath);
+      const originalModuleLoad = Module._load;
+      let testApi;
+      try {
+        // The brain loop only needs secrets.js to load; Electron itself is not running in CI.
+        // Stub its narrow API for this test process, then restore Node's loader immediately.
+        Module._load = function(request, parent, isMain) {
+          if (request === 'electron') {
+            return {
+              app: { getPath: () => dataDir },
+              safeStorage: {
+                isEncryptionAvailable: () => false,
+                encryptString: (value) => Buffer.from(value),
+                decryptString: (value) => Buffer.from(value).toString(),
+              },
+            };
+          }
+          return originalModuleLoad.call(this, request, parent, isMain);
+        };
+        testApi = require(llmPath)._test;
+      } finally {
+        Module._load = originalModuleLoad;
+      }
+      const { addonAgent } = testApi;
       const toolDefs = [
         { name: 'web_search', description: 'Search the web for relevant sources.', schema: { type: 'object', properties: { query: { type: 'string' }, count: { type: 'integer' } }, required: ['query'] } },
         { name: 'web_fetch', description: 'Read the contents of a web page.', schema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } },
       ];
       const toolCalls = [];
-      const answer = await _test.addonAgent({
+      const answer = await addonAgent({
         llm: { provider: 'addon:llm-llamacpp' },
         agent: { maxSteps: 5 },
       }, {
