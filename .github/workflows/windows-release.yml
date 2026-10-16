@@ -38,9 +38,9 @@ jobs:
         id: version
         shell: pwsh
         env:
-          RELEASE_VERSION: \${{ inputs.version }}
-          EVENT_NAME: \${{ github.event_name }}
-          RUN_NUMBER: \${{ github.run_number }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
           $currentVersion = [version]((Get-Content package.json -Raw | ConvertFrom-Json).version)
           if ($env:EVENT_NAME -eq 'workflow_dispatch') {
@@ -194,12 +194,12 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v\${{ steps.version.outputs.version }}
-          name: Saeed v\${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Saeed v${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: |
-            dist/Saeed Setup \${{ steps.version.outputs.version }}.exe
-            dist/Saeed Setup \${{ steps.version.outputs.version }}.exe.blockmap
+            dist/Saeed Setup ${{ steps.version.outputs.version }}.exe
+            dist/Saeed Setup ${{ steps.version.outputs.version }}.exe.blockmap
             dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
