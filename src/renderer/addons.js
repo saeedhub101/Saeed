@@ -41,7 +41,7 @@ function settingsForm(a) {
   if (!a.settingsDef.length) return null;
   const values = { ...a.settings };
   const save = debounce(() => api.addonsSaveSettings(a.id, values), 300);
-  return h('div', { class: 'form' }, a.settingsDef.map((f) => {
+  const fields = a.settingsDef.map((f) => {
     let el;
     if (f.type === 'select') el = h('select', { value: values[f.key] }, (f.options || []).map((o) => h('option', { value: Array.isArray(o) ? o[0] : o }, Array.isArray(o) ? o[1] : o)));
     else if (f.type === 'checkbox') el = h('input', { type: 'checkbox', checked: !!values[f.key] });
@@ -50,7 +50,23 @@ function settingsForm(a) {
       values[f.key] = el.type === 'checkbox' ? el.checked : f.type === 'number' ? Number(el.value) : el.value; save();
     });
     return h('div', { class: 'row' }, h('span', { class: 'lbl' }, f.label || f.key), el);
-  }));
+  });
+  if (a.id !== 'llm-llamacpp') return h('div', { class: 'form' }, fields);
+  const bar = h('div', { class: 'bar', hidden: true }, h('div', {}));
+  const status = h('div', { class: 'meta' }, 'The local model is optional. Download one only when you choose to use it; it will not download during chat.');
+  bars['local-brain-model'] = { bar: bar.firstChild, text: status };
+  const download = h('button', { class: 'btn primary', onclick: async () => {
+    const choice = values.modelChoice || 'qwen3-0.6b';
+    await api.addonsSaveSettings(a.id, values);
+    download.disabled = true; bar.hidden = false; status.textContent = 'Starting model download…';
+    const r = await api.addonsDownloadModel(choice);
+    download.disabled = false;
+    if (r.ok) { status.textContent = r.alreadyPresent ? 'This model is already downloaded and selected.' : 'Model downloaded and selected. Saeed will use it locally when the local brain is selected.'; toast('Local model ready.'); }
+    else { bar.hidden = true; status.textContent = 'Model download failed: ' + r.error; toast(r.error); }
+  } }, 'Download selected model');
+  return h('div', { class: 'form' }, fields,
+    h('div', { class: 'meta' }, 'Model downloads are manual and optional. Qwen3 0.6B is the smaller option (~0.43 GB); Qwen3 4B is larger (~2.5 GB).'),
+    h('div', { class: 'btns' }, download), bar, status);
 }
 
 function installedCard(a) {
