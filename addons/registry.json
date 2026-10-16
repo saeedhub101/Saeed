@@ -3,7 +3,7 @@
     {
       "author": "Saeed",
       "sha256": "af12e2da066272d35964727c904ff5942636db78dbb70214a313e717a299de88",
-      "description": "Optional local LLM runtime. Downloaded separately; the GGUF model downloads on first use.",
+      "description": "Optional local LLM runtime. Install separately, then explicitly download a GGUF model from Add-ons only if desired.",
       "size": 394138527,
       "version": "1.0.2",
       "url": "https://github.com/saeedhub101/Saeed/releases/download/addons/llm-llamacpp-1.0.2.zip",
