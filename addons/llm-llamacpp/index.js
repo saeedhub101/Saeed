@@ -94,8 +94,16 @@ function compactTools(tools) {
 
 function selectLocalTools(tools, messages) {
   const defs = Array.isArray(tools) ? tools : [];
-  const userText = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role === 'user').slice(-4).map((m) => String(m.text || '')).join(' ');
-  const text = userText.toLowerCase().replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  const userMessages = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role === 'user');
+  const latest = userMessages.length ? String(userMessages[userMessages.length - 1].text || '') : '';
+  const previous = userMessages.length > 1 ? String(userMessages[userMessages.length - 2].text || '') : '';
+  // Do not let an old request keep privileged tools visible in a later, unrelated turn.
+  // Only inherit the previous task when the latest user message is clearly a short follow-up.
+  const latestTrimmed = latest.trim();
+  const followUp = /^(?:yes|yeah|yep|ok|okay|sure|continue|go ahead|do it|proceed|that one|same|نعم|اه|أه|تمام|اكمل|تابع|نفذ|اعملها|كمل|موافق|نفسه|نفسها)[.!؟?\\s]*$/i.test(latestTrimmed)
+    || (latestTrimmed.split(/\\s+/).length <= 3 && /^(?:yes|yeah|yep|ok|okay|sure|continue|go ahead|do it|proceed|نعم|اه|أه|تمام|اكمل|تابع|نفذ|اعملها|كمل|موافق)/i.test(latestTrimmed));
+  const userText = followUp && previous ? previous + ' ' + latest : latest;
+  const text = userText.toLowerCase().replace(/[\\u064B-\\u065F\\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
   const hasImages = (Array.isArray(messages) ? messages : []).some((m) => m && Array.isArray(m.images) && m.images.length > 0);
   const chosen = new Set();
   const exact = (names) => { for (const t of defs) if (names.includes(t.name)) chosen.add(t.name); };
