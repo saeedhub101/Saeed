@@ -76,7 +76,7 @@ jobs:
             id = "llm-llamacpp"
             name = "Local brain (Qwen / Llama)"
             version = $env:ADDON_VERSION
-            description = "Optional local LLM runtime. Downloaded separately; the GGUF model downloads on first use."
+            description = "Optional local LLM runtime. Install it separately; model weights are downloaded only after the user explicitly chooses a model."
             author = "Saeed"
             permissions = @()
             category = "brain"
