@@ -166,6 +166,27 @@ function sourcesCard() {
     h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: async () => { await api.addonsSetSources(list); toast('Sources saved.'); loadStore(); } }, 'Save sources')));
 }
 
+function qwenModelsCard() {
+  const status = h('div', { class: 'meta' }, 'Choose a Qwen model. The model is downloaded separately from the Local Brain add-on.');
+  const bar = h('div', { class: 'bar', hidden: true }, h('div', {}));
+  const controls = [
+    ['qwen3-0.6b', 'Qwen3 0.6B — smaller (~430 MB)'],
+    ['qwen3-4b', 'Qwen3 4B — stronger (~2.5 GB)']
+  ].map(([choice, label]) => h('button', { class: 'btn primary', onclick: async (event) => {
+    const button = event.currentTarget || event.target;
+    button.disabled = true; bar.hidden = false; status.textContent = 'Downloading ' + label + '…';
+    bars['qwen-model-' + choice] = { bar: bar.firstChild, text: status };
+    const r = await api.addonsDownloadModel(choice);
+    button.disabled = false;
+    if (r.ok) { status.textContent = label + ' downloaded and selected. Install/enable Local Brain to use it.'; toast(label + ' ready.'); }
+    else { status.textContent = 'Download failed: ' + r.error; toast(r.error); }
+  } }, 'Download ' + label));
+  return h('div', { class: 'card' },
+    h('h4', {}, 'Qwen local AI models'),
+    h('div', { class: 'meta' }, 'Qwen models are not separate ZIP add-ons. Select and download the model file here; install and enable “Local brain (Qwen / Llama)” to run it.'),
+    h('div', { class: 'btns' }, ...controls), bar, status);
+}
+
 function render() {
   const y = window.scrollY;
   if (tab === 'installed') {
@@ -173,6 +194,7 @@ function render() {
   } else {
     const shown = store ? store.filter((e) => cat === 'all' || e.category === cat) : [];
     root.replaceChildren(
+      qwenModelsCard(),
       linkOpen ? linkCard() : null,
       showSources ? sourcesCard() : null,
       h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: loadStore }, 'Refresh list'), h('button', { class: 'btn', onclick: () => { showSources = !showSources; render(); } }, 'Sources…')),
