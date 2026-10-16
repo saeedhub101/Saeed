@@ -321,5 +321,60 @@ try {
     if (!bad) console.log('  ok   shared executor blocks unconfirmed or mismatched high-impact actions');
   } catch (e) { fail('shared executor policy tests could not run: ' + e.message); }
   await retryGuardTest.catch((e) => fail('tool-call retry guard: ' + e.message));
+
+  // 3. Exercise the real local-agent orchestration with a deterministic model adapter.
+  // This verifies search -> evidence passed to model -> source fetch -> evidence-based synthesis.
+  try {
+    const llmTest = require(path.join(root, 'src/main/llm.js'))._test;
+    const addonsPath = require.resolve(path.join(root, 'src/main/addons.js'));
+    const originalAddons = require.cache[addonsPath];
+    const calls = [];
+    let modelTurns = 0;
+    const fakeAddons = {
+      callProvider: async (_kind, _id, payload) => {
+        modelTurns++;
+        const toolMessages = payload.messages.filter((m) => m.role === 'tool');
+        if (modelTurns === 1) {
+          if (!toolMessages.some((m) => m.name === 'web_search' && /Rome|Italy/i.test(m.text))) {
+            fail('local model did not receive the automatic web-search evidence');
+          }
+          return { text: '', toolCalls: [{ id: 'fetch-rome', name: 'web_fetch', args: { url: 'https://example.test/rome' } }] };
+        }
+        if (!toolMessages.some((m) => m.name === 'web_fetch' && /capital of Italy/i.test(m.text))) {
+          fail('local model did not receive the fetched source content before answering');
+        }
+        return { text: 'Rome is the capital of Italy.', toolCalls: [] };
+      },
+    };
+    require.cache[addonsPath] = { id: addonsPath, filename: addonsPath, loaded: true, exports: fakeAddons };
+    try {
+      const answer = await llmTest.addonAgent(
+        { llm: { provider: 'addon:llamacpp', agent: { maxSteps: 4 } } },
+        {
+          system: 'Answer factual questions using evidence.',
+          history: [{ role: 'user', text: 'Where is Rome?' }],
+          tools: [
+            { name: 'web_search', description: 'Search web', schema: { type: 'object' } },
+            { name: 'web_fetch', description: 'Read page', schema: { type: 'object' } },
+          ],
+          execTool: async (name, args) => {
+            calls.push({ name, args });
+            if (name === 'web_search') return JSON.stringify([{ title: 'Rome', url: 'https://example.test/rome', snippet: 'Rome is the capital of Italy.' }]);
+            if (name === 'web_fetch') return 'Rome reference: Rome is the capital of Italy.';
+            return 'Unexpected tool: ' + name;
+          },
+        },
+      );
+      if (calls[0]?.name !== 'web_search' || calls[0]?.args?.query !== 'Where is Rome?') fail('local-agent orchestration did not execute the expected automatic search');
+      if (calls[1]?.name !== 'web_fetch' || calls[1]?.args?.url !== 'https://example.test/rome') fail('local-agent orchestration did not read the selected source');
+      if (!/Rome.*capital of Italy/i.test(answer)) fail('local-agent synthesis did not return the fact supported by fetched evidence');
+      if (modelTurns !== 2) fail('local-agent evidence test expected two model turns, got ' + modelTurns);
+      if (!bad) console.log('  ok   local agent search-to-evidence-to-answer integration');
+    } finally {
+      if (originalAddons) require.cache[addonsPath] = originalAddons;
+      else delete require.cache[addonsPath];
+    }
+  } catch (e) { fail('local agent evidence integration test could not run: ' + e.message); }
+
   process.exit(bad ? 1 : 0);
 })();
