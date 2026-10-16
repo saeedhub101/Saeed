@@ -63,6 +63,17 @@ try {
   if (parse('{"tool_call":{"name":"open_item","args":{}}}', defs).length) fail('local tool parser accepted missing required arguments');
   if (parse('{"tool_call":{"name":"express","args":{"intent":"destroy"}}}', defs).length) fail('local tool parser accepted an invalid enum');
   if (parse('Example JSON only: {"name":"open_item","args":{"name":"Excel"}}', defs).length) fail('local tool parser executed an ordinary JSON example in prose');
+  // Guard the live local-LLM path against a regression that passed syntax-only checks:
+  // the selected tool list must exist before it is used to construct the chat session.
+  const localSource = fs.readFileSync(path.join(root, 'addons/llm-llamacpp/index.js'), 'utf8');
+  const completeStart = localSource.indexOf('async complete({ system, messages, tools }, ctx)');
+  const completeEnd = localSource.indexOf('async deactivate()', completeStart);
+  const completeSource = localSource.slice(completeStart, completeEnd < 0 ? undefined : completeEnd);
+  const activeToolsAt = completeSource.indexOf('const activeTools = selectLocalTools(tools, messages)');
+  const sessionAt = completeSource.indexOf('new LlamaChatSession(');
+  if (activeToolsAt < 0 || sessionAt < 0 || activeToolsAt > sessionAt) fail('local LLM initializes its chat session before selecting active tools');
+  if (!/systemPrompt:\s*String\(system \|\| ''\) \+ toolInstructions\(activeTools\)/.test(completeSource)) fail('local LLM session prompt does not use the selected tool catalogue');
+  if (!/text:\s*String\(system \|\| ''\) \+ toolInstructions\(activeTools\)/.test(completeSource)) fail('local LLM chat history does not use the selected tool catalogue');
   const selectTools = require(path.join(root, 'addons/llm-llamacpp/index.js')).__test.selectLocalTools;
   const catalogue = [
     { name: 'confirm_with_user' }, { name: 'open_item' }, { name: 'web_search' },
