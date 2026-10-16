@@ -39,4 +39,28 @@ for (const id of fs.readdirSync(path.join(root, 'addons'))) {
   }
 }
 if (!bad) console.log('  ok   add-on manifests');
+
+/* 3. local brain tool-call parsing: tolerant of common formatting, strict about allowed names and schemas. */
+try {
+  const parse = require(path.join(root, 'addons/llm-llamacpp/index.js')).__test.parseToolCall;
+  const defs = [
+    { name: 'open_item', schema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
+    { name: 'express', schema: { type: 'object', properties: { intent: { type: 'string', enum: ['happy', 'sit'] } }, required: ['intent'] } },
+  ];
+  const cases = [
+    ['plain JSON', '{"tool_call":{"name":"open_item","args":{"name":"Excel"}}}', 'open_item'],
+    ['fenced JSON', '```json\n{"tool_call":{"name":"open_item","args":{"name":"Excel"}}}\n```', 'open_item'],
+    ['JSON in explanation', 'سأفتح البرنامج الآن. {"tool_call":{"name":"open_item","args":{"name":"Excel"}}}', 'open_item'],
+    ['tool-call tag', '<tool_call>{"name":"open_item","arguments":{"name":"Excel"}}</tool_call>', 'open_item'],
+  ];
+  for (const [label, input, expected] of cases) {
+    const result = parse(input, defs);
+    if (!result.length || result[0].name !== expected || result[0].args.name !== 'Excel') fail('local tool parser: ' + label);
+  }
+  if (parse('{"tool_call":{"name":"delete_everything","args":{}}}', defs).length) fail('local tool parser accepted an unknown tool');
+  if (parse('{"tool_call":{"name":"open_item","args":{}}}', defs).length) fail('local tool parser accepted missing required arguments');
+  if (parse('{"tool_call":{"name":"express","args":{"intent":"destroy"}}}', defs).length) fail('local tool parser accepted an invalid enum');
+  if (!bad) console.log('  ok   local brain tool-call parsing and schema validation');
+} catch (e) { fail('local brain tool-call tests could not run: ' + e.message); }
+
 process.exit(bad ? 1 : 0);
