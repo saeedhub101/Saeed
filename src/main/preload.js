@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('api', {
   addonsRemove: call('addons:remove'),
   addonsStop: call('addons:stop'),
   addonsSaveSettings: call('addons:save-settings'),
+  addonsDownloadModel: call('addons:download-model'),
   addonsRegistry: call('addons:registry'),
   addonsInstall: call('addons:install'),
   addonsInstallZip: call('addons:install-zip'),
