@@ -101,7 +101,7 @@ async function anthropicAgent(s, { system, history, tools, execTool, signal, onT
     const text = j.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     if (text) all += (all ? ' ' : '') + text;
     const uses = j.content.filter((b) => b.type === 'tool_use');
-    if (j.stop_reason !== 'tool_use' || !uses.length) return all.trim();
+    if (j.stop_reason !== 'tool_use' || !uses.length) return text.trim() || all.trim();
     const results = [];
     for (const u of uses) {
       let r;
@@ -166,7 +166,7 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
     const m = await openaiCall(p, key, { model: p.model, messages: msgs, tools: toolDefs, tool_choice: 'auto' }, signal, onText);
     msgs.push({ ...m, content: m.content || null });
     if (m.content) all += (all ? ' ' : '') + m.content;
-    if (!m.tool_calls || !m.tool_calls.length) return all.trim();
+    if (!m.tool_calls || !m.tool_calls.length) return String(m.content || '').trim() || all.trim();
     const images = [];
     for (const tc of m.tool_calls) {
       let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* invalid JSON is surfaced to the model */ }
@@ -195,7 +195,7 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
   for (let i = 0; i < maxSteps(s); i++) {
     const r = await addons.callProvider('llm', id, { system, messages: msgs, tools: defs }, signal, onText);
     if (r.text) all += (all ? ' ' : '') + r.text;
-    if (!r.toolCalls || !r.toolCalls.length) return all.trim();
+    if (!r.toolCalls || !r.toolCalls.length) return String(r.text || '').trim() || all.trim();
     // Keep a model turn in local chat history so the following tool result is not a consecutive user turn.
     // This marker is internal context only; it is never added to the visible answer.
     msgs.push({ role: 'assistant', text: r.text || '[Requested tool: ' + r.toolCalls.map((tc) => tc.name).join(', ') + ']', toolCalls: r.toolCalls });
