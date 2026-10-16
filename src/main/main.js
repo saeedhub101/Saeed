@@ -58,9 +58,23 @@ function notifyAddons() {
   }, 150);
 }
 let saveTimer;
+function persistCfg() {
+  const target = cfgFile(), tmp = target + '.tmp';
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), 'utf8');
+    fs.renameSync(tmp, target);
+  } catch (error) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* cleanup is best effort */ }
+    throw error;
+  }
+}
 function saveCfg() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => fs.writeFile(cfgFile(), JSON.stringify(cfg, null, 2), () => {}), 300);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    try { persistCfg(); } catch (error) { console.error('[config] Could not save settings:', error); }
+  }, 300);
 }
 function broadcast(except) {
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && w.webContents !== except) w.webContents.send('config:changed', cfg);
@@ -443,6 +457,11 @@ ipcMain.on('prayer:test', () => triggerAdhan('Dhuhr'));
 /* ---------------- Lifecycle ---------------- */
 app.on('second-instance', () => setVisible(true));
 app.on('window-all-closed', () => { /* stay alive in the tray */ });
+app.on('before-quit', () => {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  try { persistCfg(); } catch (error) { console.error('[config] Could not flush settings before quit:', error); }
+});
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.whenReady().then(() => {
   loadCfg();
