@@ -5,9 +5,15 @@ const { app } = require('electron');
 let au = null, state = { state: 'idle', current: app.getVersion() }, emit = () => {}, getSettings = () => ({});
 const DEFAULT_REPOSITORY = 'saeedhub101/Saeed';
 function repository(value) {
-  const candidate = String(value || '').trim().replace(/^https?:\\/\\/github\\.com\\//i, '').replace(/\\.git$/i, '').replace(/^\\/+|\\/+$/g, '');
+  const candidate = String(value || DEFAULT_REPOSITORY).trim()
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/\.git$/i, '')
+    .replace(/^\/+|\/+$/g, '');
   const parts = candidate.split('/');
-  return parts.length === 2 && parts.every((part) => /^[A-Za-z0-9_.-]+$/.test(part)) ? { owner: parts[0], repo: parts[1] } : (() => { throw new Error('Invalid update repository. Use owner/name, for example saeedhub101/Saeed.'); })();
+  if (parts.length !== 2 || !parts.every((part) => /^[A-Za-z0-9_.-]+$/.test(part))) {
+    throw new Error('Invalid update repository. Use owner/name, for example saeedhub101/Saeed.');
+  }
+  return { owner: parts[0], repo: parts[1] };
 }
 function set(s) { state = { ...state, ...s }; emit(state); }
 const first = (e) => String((e && e.message) || e).split('\n')[0].slice(0, 200);
