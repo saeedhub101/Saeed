@@ -5,7 +5,7 @@ const path = require('path');
 const { Readable, Transform } = require('stream');
 const { pipeline } = require('stream/promises');
 
-let state = null;
+let state = null, statePromise = null;
 
 async function modelFile(ctx) {
   const configuredPath = String(ctx.settings.modelPath || '').trim();
@@ -51,14 +51,27 @@ async function modelFile(ctx) {
 
 async function ensure(ctx) {
   if (state) return state;
-  const { getLlama } = await import('node-llama-cpp');
-  const modelPath = await modelFile(ctx);
-  ctx.status('Loading the model…');
-  const llama = await getLlama();
-  const model = await llama.loadModel({ modelPath });
-  const context = await model.createContext({ contextSize: Number(ctx.settings.contextSize) || 4096 });
-  state = { llama, model, context };
-  return state;
+  // Multiple calls can arrive before the first model load completes. Share one load promise
+  // so we never allocate duplicate copies of a multi-GB model in the add-on process.
+  if (!statePromise) {
+    statePromise = (async () => {
+      const { getLlama } = await import('node-llama-cpp');
+      const modelPath = await modelFile(ctx);
+      ctx.status('Loading the model…');
+      const llama = await getLlama();
+      const model = await llama.loadModel({ modelPath });
+      try {
+        const context = await model.createContext({ contextSize: Number(ctx.settings.contextSize) || 4096 });
+        state = { llama, model, context };
+        return state;
+      } catch (error) {
+        try { await model.dispose(); } catch { /* cleanup is best effort */ }
+        throw error;
+      }
+    })();
+  }
+  try { return await statePromise; }
+  finally { statePromise = null; }
 }
 
 function compactSchema(schema) {
