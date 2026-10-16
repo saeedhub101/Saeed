@@ -85,7 +85,7 @@ function selectLocalTools(tools, messages) {
   const chosen = new Set();
   const exact = (names) => { for (const t of defs) if (names.includes(t.name)) chosen.add(t.name); };
   const prefix = (prefixes) => { for (const t of defs) if (prefixes.some((p) => t.name.startsWith(p))) chosen.add(t.name); };
-  const base = ['confirm_with_user', 'recall_skills', 'learn_skill', 'update_skill', 'forget_skill', 'remember', 'forget', 'express', 'get_time', 'set_reminder', 'list_reminders', 'cancel_reminder', 'open_item', 'find_files', 'open_path', 'system_info', 'web_search', 'web_fetch', 'run_command'];
+  const base = ['confirm_with_user', 'recall_skills', 'learn_skill', 'update_skill', 'forget_skill', 'remember', 'forget', 'express', 'get_time', 'set_reminder', 'list_reminders', 'cancel_reminder', 'open_item', 'find_files', 'open_path', 'read_file', 'write_file', 'make_folder', 'list_folder', 'file_info', 'http_request', 'system_info', 'web_search', 'web_fetch', 'run_command'];
   exact(base);
   const hasAny = (terms) => terms.some((term) => text.includes(term));
   const fileTask = /\b(file|folder|path|save|write|read|copy|move|delete|rename|download|text|txt|csv|json|md)\b/.test(text) || hasAny(['ملف', 'مجلد', 'مسار', 'احفظ', 'اكتب', 'اقرا', 'انسخ', 'انقل', 'احذف', 'حمل', 'تنزيل', 'تحميل']);
