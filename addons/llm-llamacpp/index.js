@@ -139,7 +139,7 @@ function materializeImages(messages, ctx) {
   }
   // Keep only attachments referenced by this active conversation; a new turn without images clears old copies.
   for (const name of fs.readdirSync(dir)) {
-    if (/^[a-f0-9]{32}\\.(?:jpg|png|bmp|webp)$/i.test(name) && !active.has(name)) {
+    if (/^[a-f0-9]{32}\.(?:jpg|png|bmp|webp)$/i.test(name) && !active.has(name)) {
       try { fs.rmSync(path.join(dir, name), { force: true }); } catch { /* cleanup is best effort */ }
     }
   }
@@ -148,7 +148,10 @@ function materializeImages(messages, ctx) {
   const noteFor = (message, canReadImage) => {
     const paths = pathsFor(message);
     if (!paths.length) return '';
-    return '\\n[User attached image file(s): ' + paths.join(', ') + '. Use the listed OCR tool to read them before describing their contents. If no image-reading tool is available, say this local model cannot inspect pixels directly and ask for a description instead of guessing.]';
+    const instruction = canReadImage
+      ? 'Use the listed OCR tool to read them before describing their contents.'
+      : 'No OCR tool is available, so do not guess image contents; ask the user for a description.';
+    return '\\n[User attached image file(s): ' + paths.join(', ') + '. ' + instruction + ']';
   };
   return { pathsFor, noteFor, hasImages: active.size > 0 };
 }
