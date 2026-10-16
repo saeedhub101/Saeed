@@ -271,6 +271,22 @@ try {
 
 (async () => {
   try {
+    const actions = require(path.join(root, 'src/main/actions.js'));
+    const defaults = require(path.join(root, 'src/main/settings.js')).DEFAULT_SETTINGS;
+    for (const greeting of ['hello', 'Hi', 'good morning', 'مرحبا', 'السلام عليكم', 'كيفك']) {
+      if (!actions.isGreeting(greeting)) fail('offline greeting was not recognized: ' + greeting);
+      const result = await actions.route(greeting, defaults);
+      if (!result || !result.reply || result.intent !== 'greet') fail('offline greeting did not produce a local response: ' + greeting);
+    }
+    if (actions.isGreeting('hello, please create a spreadsheet')) fail('greeting matcher swallowed a real task request');
+    const pipelineSource = fs.readFileSync(path.join(root, 'src/main/pipeline.js'), 'utf8');
+    if (!pipelineSource.includes('s.commands.local || actions.isGreeting(text)')) fail('greetings still depend on the optional local-commands setting');
+    const llmSource = fs.readFileSync(path.join(root, 'src/main/llm.js'), 'utf8');
+    if (!llmSource.includes('No OpenAI API key is configured')) fail('missing OpenAI credentials do not produce a clear actionable error');
+    if (!llmSource.includes('select a configured local brain')) fail('missing-key guidance does not mention a local brain option');
+    if (!bad) console.log('  ok   greetings work locally without an API key');
+  } catch (e) { fail('offline greeting checks could not run: ' + e.message); }
+  try {
     const brain = require(path.join(root, 'src/main/brain.js'));
     const deletion = await brain.execTool({}, 'delete_path', { path: 'Documents/should-not-be-deleted.txt' });
     if (!String(deletion).startsWith('Action paused: explicit confirmation is required')) fail('shared executor allowed deletion without confirmation');
