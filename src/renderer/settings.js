@@ -92,7 +92,7 @@ function llmSection() {
     const p = c[c.provider];
     const model = T(p, 'model');
     if (c.provider === 'openai') {
-      const dl = h('datalist', { id: 'openai-models' }, ['gpt-5.1', 'gpt-5', 'gpt-5-mini'].map((m) => h('option', { value: m })));
+      const dl = h('datalist', { id: 'openai-models' }, ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.1', 'gpt-5', 'gpt-5-mini'].map((m) => h('option', { value: m })));
       model.setAttribute('list', 'openai-models');
       kids.push(
         row('Base URL', T(p, 'baseUrl')),
