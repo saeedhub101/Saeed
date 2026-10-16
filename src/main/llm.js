@@ -117,7 +117,7 @@ async function anthropicAgent(s, { system, history, tools, execTool, signal, onT
   }
   // The last permitted tool round may have returned useful evidence without leaving a
   // model turn to interpret it. Make a final tools-disabled synthesis call.
-  const finalSystem = system + '\\n\\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
+  const finalSystem = system + '\n\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
   const final = await anthropicCall(key, { model: s.llm.anthropic.model, max_tokens: 1800, system: finalSystem, messages: msgs, tools: [] }, signal, onText);
   const finalText = (final.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
   return finalText || 'I could not produce a verified final summary.';
@@ -179,8 +179,11 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
     }
     if (images.length) msgs.push({ role: 'user', content: [{ type: 'text', text: '(image returned by the tool)' }, ...images] });
   }
-  const finalSystem = system + '\\n\\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
-  const final = await openaiCall(p, key, { model: p.model, messages: [{ role: 'system', content: finalSystem }, ...msgs], tools: [], tool_choice: 'none' }, signal, onText);
+  const finalSystem = system + '\n\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
+  const finalMessages = msgs.slice();
+  if (finalMessages[0] && finalMessages[0].role === 'system') finalMessages[0] = { ...finalMessages[0], content: finalSystem };
+  else finalMessages.unshift({ role: 'system', content: finalSystem });
+  const final = await openaiCall(p, key, { model: p.model, messages: finalMessages, tools: [], tool_choice: 'none' }, signal, onText);
   return String(final.content || '').trim() || 'I could not produce a verified final summary.';
 }
 
@@ -206,7 +209,7 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
       msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.name, text: rText(out) || 'Tool returned no content. Verify the state before assuming success.' });
     }
   }
-  const finalSystem = system + '\\n\\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
+  const finalSystem = system + '\n\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
   const final = await addons.callProvider('llm', id, { system: finalSystem, messages: msgs, tools: [] }, signal, onText);
   return String(final.text || '').trim() || 'I could not produce a verified final summary.';
 }
