@@ -73,6 +73,9 @@ try {
   if (!policy('http_request', { method: 'POST', url: 'https://example.com' })) fail('confirmation policy did not protect an external write request');
   if (!policy('database__execute', { sql: 'UPDATE customers SET active = 0' })) fail('confirmation policy did not protect database writes');
   if (policy('database__execute', { sql: 'SELECT * FROM customers' })) fail('confirmation policy incorrectly blocked a read-only database query');
+  const signature = require(path.join(root, 'src/main/brain.js')).confirmationSignature;
+  if (signature('delete_path', { path: 'Documents/a.txt' }) === signature('delete_path', { path: 'Documents/b.txt' })) fail('confirmation signature did not bind approval to the exact target');
+  if (signature('delete_path', { path: 'Documents/a.txt', permanent: true }) !== signature('delete_path', { permanent: true, path: 'Documents/a.txt' })) fail('confirmation signature depends on object key order');
   if (!bad) console.log('  ok   local brain tool-call parsing and schema validation');
 } catch (e) { fail('local brain tool-call tests could not run: ' + e.message); }
 
