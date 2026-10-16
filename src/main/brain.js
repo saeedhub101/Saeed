@@ -215,6 +215,7 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
           const result = await execTool(settings, name, args, { onIntent, onTool, signal, trace });
           const summary = resultText(result);
           const failed = /^(?:error|denied|failed|could not|couldn't|unknown tool|tool call rejected)\b/i.test(summary)
+            || /\b(?:destination already exists|no file with that name|not found|does not exist|permission denied|could not|cannot|failed|invalid|rejected)\b/i.test(summary)
             || /the user said no|\bHTTP [45]\d\d\b/i.test(summary);
           markResult(result, !failed);
           return result;
