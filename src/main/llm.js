@@ -221,6 +221,20 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
 
 /* ---------- brains that come from add-ons (for example a local Qwen / Llama) ---------- */
 // The add-on implements llm.complete({ system, messages, tools }) -> { text, toolCalls: [{ id, name, args }] }.
+function shouldAutoSearch(text) {
+  const raw = String(text || '').trim();
+  if (!raw || raw.length < 5) return false;
+  const normalized = raw.toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '')
+    .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  // Requests that clearly ask Saeed to operate on the user's PC should stay local.
+  if (/\b(open|launch|run|create|write|save|delete|rename|move|copy|translate|summari[sz]e|calculate|draw|click|press|install)\b/i.test(normalized)
+    || /افتح|شغل|نفذ|انشئ|اكتب|احفظ|احذف|اعد تسميه|انقل|انسخ|ترجم|لخص|احسب|ارسم|اضغط|انقر|ثبت|سطب/.test(normalized)) return false;
+  const currentOrResearch = /\b(current time|what time|weather|forecast|latest news|news about|price of|exchange rate|capital of|where is|where are|who is|when did|when was|how many|how much|how far|population of|located|meaning of|tell me about|information about|latest|today|right now)\b/i.test(normalized)
+    || /اين|وين|من هو|من هي|ما هو|ما هي|متى|لماذا|كيف|كم|ما معنى|معنى|اين تقع|اين يوجد|عاصمه|الطقس|درجه الحراره|كم الساعه|اخر اخبار|احدث|سعر|اسعار|عدد سكان|معلومات عن|حدثني عن/.test(normalized);
+  return currentOrResearch;
+}
+
 async function addonAgent(s, { system, history, tools, execTool, signal, onText }) {
   const addons = require('./addons');
   const id = s.llm.provider;
@@ -228,8 +242,20 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
   const defs = tools.map((t) => ({ name: t.name, description: t.description, schema: t.schema }));
   let all = '';
   const runTool = createToolRunner(execTool, signal);
+  let agentSystem = system;
+  const latestUser = [...history].reverse().find((m) => m && m.role === 'user');
+  const searchTool = defs.find((t) => t.name === 'web_search');
+  // Give small local models real evidence before asking them to answer straightforward factual questions.
+  // This is intentionally limited to information requests; app/file actions remain tool-selected.
+  if (latestUser && searchTool && shouldAutoSearch(latestUser.text)) {
+    const query = String(latestUser.text || '').trim();
+    const result = await runTool('web_search', { query, count: 6 });
+    msgs.push({ role: 'tool', toolCallId: 'automatic-web-search', name: 'web_search',
+      text: 'Automatic preliminary web search for the current user question (' + query + '):\\n' + (rText(result) || 'Search returned no readable results.') });
+    agentSystem += '\\n\\nAn automatic preliminary web search was already performed for this factual question. Inspect its result before answering. If it contains useful results, use web_fetch to read a relevant source when needed. If results are empty, irrelevant, or an error, try a meaningfully different search query before giving up. Do not repeat the identical query. Distinguish verified facts from uncertainty.';
+  }
   for (let i = 0; i < maxSteps(s); i++) {
-    const r = await addons.callProvider('llm', id, { system, messages: msgs, tools: defs }, signal, onText);
+    const r = await addons.callProvider('llm', id, { system: agentSystem, messages: msgs, tools: defs }, signal, onText);
     if (r.text) all += (all ? ' ' : '') + r.text;
     if (!r.toolCalls || !r.toolCalls.length) return String(r.text || '').trim() || all.trim();
     // Keep a model turn in local chat history so the following tool result is not a consecutive user turn.
@@ -242,9 +268,9 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
     }
   }
   const finalSystem = system + '\n\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
-  const final = await addons.callProvider('llm', id, { system: finalSystem, messages: msgs, tools: [] }, signal, onText);
+  const final = await addons.callProvider('llm', id, { system: agentSystem + '\n\n' + finalSystem, messages: msgs, tools: [] }, signal, onText);
   return String(final.text || '').trim() || 'I could not produce a verified final summary.';
 }
 
 const runAgent = (s, opts) => (s.llm.provider.startsWith('addon:') ? addonAgent(s, opts) : s.llm.provider === 'anthropic' ? anthropicAgent(s, opts) : openaiAgent(s, opts));
-module.exports = { runAgent, _test: { createToolRunner, parseToolArguments, requestOptions } };
+module.exports = { runAgent, _test: { createToolRunner, parseToolArguments, requestOptions, shouldAutoSearch } };
