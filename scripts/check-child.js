@@ -84,6 +84,18 @@ try {
   const excelTools = selectTools(catalogue, [{ role: 'user', text: 'أنشئ تقرير Excel' }]);
   if (!excelTools.some((t) => t.name === 'excel__read_workbook')) fail('local tool router missed Excel tools for an Arabic Excel request');
   if (excelTools.some((t) => t.name === 'run_command' || t.name === 'http_request')) fail('local tool router exposed raw command/API tools for a normal Excel task');
+  const staleCommandHistory = selectTools(catalogue, [
+    { role: 'user', text: 'شغل أمر PowerShell لفحص الملفات' },
+    { role: 'assistant', text: 'تم فحص الملفات.' },
+    { role: 'user', text: 'أنشئ تقرير Excel' },
+  ]);
+  if (staleCommandHistory.some((t) => t.name === 'run_command' || t.name === 'http_request')) fail('local tool router retained privileged tools from an unrelated prior request');
+  const followUpTools = selectTools(catalogue, [
+    { role: 'user', text: 'شغل أمر PowerShell لفحص الملفات' },
+    { role: 'assistant', text: 'هل أتابع؟' },
+    { role: 'user', text: 'نعم، تابع' },
+  ]);
+  if (!followUpTools.some((t) => t.name === 'run_command')) fail('local tool router lost task tools on a short Arabic follow-up');
   const commandTools = selectTools(catalogue, [{ role: 'user', text: 'شغل أمر PowerShell لفحص الملفات' }]);
   if (!commandTools.some((t) => t.name === 'run_command')) fail('local tool router missed run_command for an explicit Arabic PowerShell request');
   const apiTools = selectTools(catalogue, [{ role: 'user', text: 'Call the REST API endpoint with an HTTP request' }]);
