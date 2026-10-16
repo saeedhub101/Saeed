@@ -77,6 +77,10 @@ try {
   const signature = require(path.join(root, 'src/main/brain.js')).confirmationSignature;
   if (signature('delete_path', { path: 'Documents/a.txt' }) === signature('delete_path', { path: 'Documents/b.txt' })) fail('confirmation signature did not bind approval to the exact target');
   if (signature('delete_path', { path: 'Documents/a.txt', permanent: true }) !== signature('delete_path', { permanent: true, path: 'Documents/a.txt' })) fail('confirmation signature depends on object key order');
+  const brainModule = require(path.join(root, 'src/main/brain.js'));
+  const confirmSchema = brainModule.toolDefs().find((t) => t.name === 'confirm_with_user').schema;
+  if (validate({ question: 'Proceed?' }, confirmSchema) === null) fail('confirmation tool accepted an unscoped approval request');
+  if (validate({ question: 'Delete?', actionName: 'delete_path', actionArgs: { path: 'Documents/a.txt' } }, confirmSchema) !== null) fail('confirmation tool rejected a properly scoped approval request');
   if (!bad) console.log('  ok   local brain tool-call parsing and schema validation');
 } catch (e) { fail('local brain tool-call tests could not run: ' + e.message); }
 
