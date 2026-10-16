@@ -5,7 +5,7 @@ const secrets = require('./secrets');
 const brain = require('./brain');
 
 let ws = null, bus = null, rate = 24000, lastUser = '', ready = false, ctx = null;
-const toolPolicy = { confirmedAction: false };
+const toolPolicy = { confirmedAction: null };
 
 const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
 
