@@ -64,7 +64,7 @@ function jsonCandidates(raw) {
   const add = (s) => { const v = String(s || '').trim(); if (v && !out.includes(v)) out.push(v); };
   add(source);
   for (const m of source.matchAll(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/ig)) add(m[1]);
-  for (const m of source.matchAll(/`(?:json)?\s*([\s\S]*?)\s*`/ig)) add(m[1]);
+  for (const m of source.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/ig)) add(m[1]);
   // Small local models often add a sentence around the JSON. Extract balanced objects
   // without breaking on braces inside quoted strings.
   for (let i = 0; i < source.length; i++) {
