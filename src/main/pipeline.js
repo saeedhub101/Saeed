@@ -85,7 +85,7 @@ async function handleText(text, source = 'chat', images = []) {
   const speech = startSpeech(ctrl.signal, s);
   try {
     let reply;
-    const local = s.commands.local && !images.length ? await actions.route(text, s) : null;
+    const local = !images.length && (s.commands.local || actions.isGreeting(text)) ? await actions.route(text, s) : null;
     if (local) {
       reply = local.reply;
       if (local.intent) bus.avatar({ type: 'intent', name: local.intent });
