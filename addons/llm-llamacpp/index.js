@@ -40,23 +40,64 @@ async function ensure(ctx) {
   return state;
 }
 
+function toolInstructions(tools) {
+  if (!Array.isArray(tools) || !tools.length) return '';
+  return [
+    '',
+    'TOOLS: You may request one tool per response when it is useful. Only use a tool listed below.',
+    'To request a tool, output exactly one JSON object and nothing else in this format:',
+    '{"tool_call":{"name":"EXACT_TOOL_NAME","args":{}}}',
+    'Copy the exact tool name and use arguments matching its schema. Do not claim a tool ran; wait for its result.',
+    'If no tool is needed, answer normally in plain text. Never invent a tool result.',
+    'Available tools and schemas:',
+    JSON.stringify(tools),
+  ].join('\n');
+}
+
+function parseToolCall(text, tools) {
+  const allowed = new Map((Array.isArray(tools) ? tools : []).map((t) => [t.name, t]));
+  const candidates = [String(text || '').trim()];
+  const tagged = String(text || '').match(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/i);
+  if (tagged) candidates.unshift(tagged[1].trim());
+  for (const candidate of candidates) {
+    let value;
+    try { value = JSON.parse(candidate); } catch { continue; }
+    const call = value && (value.tool_call || value);
+    if (!call || typeof call.name !== 'string' || !allowed.has(call.name)) continue;
+    const args = call.args && typeof call.args === 'object' && !Array.isArray(call.args) ? call.args
+      : call.arguments && typeof call.arguments === 'object' && !Array.isArray(call.arguments) ? call.arguments : null;
+    if (!args) continue;
+    return [{ id: `local-${Date.now()}-1`, name: call.name, args }];
+  }
+  return [];
+}
+
 module.exports = {
   llm: {
-    // messages: [{ role: 'user'|'assistant'|'tool', text }]. Tools are not used by this simple local brain.
-    async complete({ system, messages }, ctx) {
+    // Local models receive the same tool catalogue as hosted providers; tools still pass through Saeed's permission broker.
+    async complete({ system, messages, tools }, ctx) {
       const { LlamaChatSession } = await import('node-llama-cpp');
       const st = await ensure(ctx);
       const seq = st.context.getSequence();
-      const session = new LlamaChatSession({ contextSequence: seq, systemPrompt: system });
+      const session = new LlamaChatSession({ contextSequence: seq, systemPrompt: String(system || '') + toolInstructions(tools) });
       try {
-        const turns = messages.filter((m) => (m.role === 'user' || m.role === 'assistant') && m.text);
+        const turns = messages.filter((m) => (m.role === 'user' || m.role === 'assistant' || m.role === 'tool') && m.text);
         const last = turns.pop();
         if (!last) return { text: '', toolCalls: [] };
-        const history = [{ type: 'system', text: system }];
-        for (const m of turns) history.push(m.role === 'user' ? { type: 'user', text: m.text } : { type: 'model', response: [m.text] });
+        const history = [{ type: 'system', text: String(system || '') + toolInstructions(tools) }];
+        for (const m of turns) {
+          if (m.role === 'user') history.push({ type: 'user', text: m.text });
+          else if (m.role === 'assistant') history.push({ type: 'model', response: [m.text] });
+          else history.push({ type: 'user', text: `Tool result (${m.name || m.toolCallId || 'tool'}):\n${m.text}` });
+        }
         session.setChatHistory(history);
-        const text = await session.prompt(last.text, { maxTokens: Number(ctx.settings.maxTokens) || 600, onTextChunk: (t) => ctx.stream(t) });
-        return { text: String(text).trim(), toolCalls: [] };
+        const text = String(await session.prompt(last.role === 'tool' ? `Tool result (${last.name || last.toolCallId || 'tool'}):\n${last.text}\nContinue the task using this result.` : last.text, {
+          maxTokens: Number(ctx.settings.maxTokens) || 600,
+        })).trim();
+        const toolCalls = parseToolCall(text, tools);
+        if (toolCalls.length) return { text: '', toolCalls };
+        if (text) ctx.stream(text);
+        return { text, toolCalls: [] };
       } finally { session.dispose(); seq.dispose(); }
     },
   },
