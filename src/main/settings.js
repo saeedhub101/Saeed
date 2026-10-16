@@ -14,7 +14,7 @@ const DEFAULT_SETTINGS = {
     reasoningEffort: 'high',          // low | medium | high; used by supported OpenAI reasoning models
     systemPrompt: '',
     anthropic: { model: 'claude-sonnet-5' },
-    openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-5.1' },
+    openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
     custom: { baseUrl: 'http://localhost:11434/v1', model: 'llama3.1' },
   },
   tts: {
