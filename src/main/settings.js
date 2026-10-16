@@ -2,7 +2,7 @@
 // Defaults for everything configurable in the Settings window.
 const DEFAULT_SETTINGS = {
   stt: {
-    provider: 'openai',                // openai | custom | elevenlabs | addon:<id> (for example the Whisper add-on)
+    provider: 'addon:whisper-local',    // offline-first; cloud STT remains optional
     language: 'auto',                  // auto | ar | en
     openai: { baseUrl: 'https://api.openai.com/v1', model: 'whisper-1' },
     custom: { baseUrl: 'https://api.groq.com/openai/v1', model: 'whisper-large-v3' },
@@ -70,7 +70,7 @@ const DEFAULT_SETTINGS = {
   },
   updates: { repo: 'saeedhub101/Saeed', autoCheck: true },
   ui: { language: 'en' },
-  addons: { registryUrl: '', sources: [], enabled: {}, settings: {}, trusted: {}, removed: [] },
+  addons: { registryUrl: '', sources: [], enabled: { 'whisper-local': true }, settings: {}, trusted: {}, removed: [] },
   performance: { idleFps: 12 },
   web: { search: 'duckduckgo', maxResults: 6, fetchMaxChars: 12000 },   // duckduckgo (no key) | brave | tavily
   memory: { enabled: true },
