@@ -67,6 +67,20 @@ try {
   })().catch((e) => { console.error('  FAIL tool-call retry guard: ' + e.message); process.exitCode = 1; });
 } catch (e) { fail('tool-call retry guard could not load: ' + e.message); }
 
+/* 2d. long-term memory retrieval prioritizes relevant facts instead of dumping the whole memory. */
+try {
+  const rankFacts = require(path.join(root, 'src/main/memory.js'))._test.rankFacts;
+  const facts = [
+    { text: 'User prefers Arabic responses and works in Jordan', t: 3 },
+    { text: 'Saeed development happens on main branch only', t: 2 },
+    { text: 'Excel reports should include annual tax calculations', t: 1 },
+    { text: 'The user prefers concise answers', t: 4 },
+  ];
+  const selected = rankFacts(facts, 'تطوير سعيد على main', 3).map((x) => x.text);
+  if (!selected.some((x) => x.includes('main branch'))) fail('memory retrieval missed a directly relevant fact');
+  if (selected.some((x) => x.includes('Excel reports'))) fail('memory retrieval included an unrelated fact ahead of relevant context');
+} catch (e) { fail('memory retrieval checks could not run: ' + e.message); }
+
 /* 3. local brain tool-call parsing: tolerant of common formatting, strict about allowed names and schemas. */
 try {
   const parse = require(path.join(root, 'addons/llm-llamacpp/index.js')).__test.parseToolCall;
