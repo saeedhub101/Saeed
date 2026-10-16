@@ -44,7 +44,14 @@ function loadCfg() {
   if (cfg.settings.llm.openai.model === 'gpt-4o-mini') cfg.settings.llm.openai.model = 'gpt-6-astra';
   if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(cfg.settings.llm.reasoningEffort)) cfg.settings.llm.reasoningEffort = 'max';
   if (!String(cfg.settings.updates.repo || '').trim()) cfg.settings.updates.repo = 'saeedhub101/Saeed';
-  if (String(cfg.settings.stt.provider) === 'local') cfg.settings.stt.provider = 'openai';   // moved to the Whisper add-on
+  if (String(cfg.settings.stt.provider) === 'local') cfg.settings.stt.provider = 'addon:whisper-local';
+  // Older installs defaulted to cloud Whisper. If no OpenAI credential exists, migrate that default
+  // to the bundled local recognizer instead of asking for an API key just to use the microphone.
+  if (cfg.settings.stt.provider === 'openai'
+    && !secrets.get('openai')
+    && /api\.openai\.com/i.test(String(cfg.settings.stt.openai.baseUrl || ''))) {
+    cfg.settings.stt.provider = 'addon:whisper-local';
+  }
   // Old "allowed folders" become allow rules in Permissions.
   const ag = cfg.settings.agent || {};
   for (const f of Array.isArray(ag.allowedFolders) ? ag.allowedFolders : []) {
