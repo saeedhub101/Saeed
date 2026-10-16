@@ -78,6 +78,44 @@ function compactTools(tools) {
   }));
 }
 
+function selectLocalTools(tools, messages) {
+  const defs = Array.isArray(tools) ? tools : [];
+  const userText = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role === 'user').slice(-4).map((m) => String(m.text || '')).join(' ');
+  const text = userText.toLowerCase().replace(/[\\u064B-\\u065F\\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  const chosen = new Set();
+  const exact = (names) => { for (const t of defs) if (names.includes(t.name)) chosen.add(t.name); };
+  const prefix = (prefixes) => { for (const t of defs) if (prefixes.some((p) => t.name.startsWith(p))) chosen.add(t.name); };
+  const base = ['confirm_with_user', 'recall_skills', 'learn_skill', 'update_skill', 'forget_skill', 'remember', 'forget', 'express', 'get_time', 'set_reminder', 'list_reminders', 'cancel_reminder', 'open_item', 'find_files', 'open_path', 'system_info', 'web_search', 'web_fetch', 'run_command'];
+  exact(base);
+  const fileTask = /\\b(file|folder|path|save|write|read|copy|move|delete|rename|download|text|txt|csv|json|md|ملف|مجلد|مسار|احفظ|اكتب|اقرا|انسخ|انقل|احذف|حمل|تنزيل|تحميل)\\b/.test(text);
+  const sheetTask = /\\b(excel|spreadsheet|xlsx|workbook|worksheet|cell|cells|csv|اكسل|إكسل|خلية|خلايا|ورقة عمل|جدول بيانات)\\b/.test(text);
+  const wordTask = /\\b(word|docx|document|letter|report|وورد|مستند|خطاب|تقرير|رساله|رسالة)\\b/.test(text);
+  const pdfTask = /\\b(pdf|invoice|receipt|فاتورة|فاتوره|بي دي اف)\\b/.test(text);
+  const browserTask = /\\b(browser|website|webpage|website|site|login|sign in|web form|متصفح|موقع|صفحه|صفحة|سجل الدخول|تسجيل الدخول|موقع ويب)\\b/.test(text);
+  const screenTask = /\\b(screen|desktop|window|button|click|keyboard|mouse|program|application|ui automation|شاشه|شاشة|نافذه|نافذة|زر|اضغط|اكبس|انقر|برنامج|واجهه|واجهة)\\b/.test(text);
+  const databaseTask = /\\b(database|sql|query|record|records|table|قاعدة بيانات|استعلام|سجل|سجلات)\\b/.test(text);
+  const imageTask = /\\b(image|picture|photo|screenshot|ocr|صوره|صورة|صور|لقطه|لقطة|اقرا الصورة|قراءة الصورة)\\b/.test(text);
+  const characterTask = /\\b(character|avatar|animation|pose|emotion|face|viseme|شخصيه|شخصية|حركه|حركة|عظمه|عظمة|عظام|وجه|تعابير)\\b/.test(text);
+  if (fileTask) exact(['list_folder', 'read_file', 'write_file', 'make_folder', 'copy_path', 'move_path', 'delete_path', 'file_info', 'download_file', 'view_image', 'http_request']);
+  if (sheetTask) prefix(['excel__', 'charts__']);
+  if (wordTask) prefix(['word__']);
+  if (pdfTask) prefix(['pdf__', 'ocr__']);
+  if (browserTask) prefix(['browser__']);
+  if (screenTask || browserTask) prefix(['desktop-control__']);
+  if (databaseTask) prefix(['database__']);
+  if (imageTask) { prefix(['ocr__', 'desktop-control__']); exact(['view_image']); }
+  if (characterTask) prefix(['party-pack__']);
+  const specialized = fileTask || sheetTask || wordTask || pdfTask || browserTask || screenTask || databaseTask || imageTask || characterTask;
+  if (!specialized) {
+    const words = [...new Set(text.split(/[^\\p{L}\\p{N}]+/u).filter((w) => w.length >= 4))];
+    const ranked = defs.filter((t) => t.name.includes('__')).map((t) => {
+      const hay = (t.name + ' ' + String(t.description || '').slice(0, 180)).toLowerCase();
+      return { name: t.name, score: words.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0) };
+    }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 6);
+    for (const t of ranked) chosen.add(t.name);
+  }
+  return defs.filter((t) => chosen.has(t.name));
+}
 function toolInstructions(tools) {
   if (!Array.isArray(tools) || !tools.length) return '';
   return [
@@ -182,8 +220,9 @@ module.exports = {
       const { LlamaChatSession } = await import('node-llama-cpp');
       const st = await ensure(ctx);
       const seq = st.context.getSequence();
-      const session = new LlamaChatSession({ contextSequence: seq, systemPrompt: String(system || '') + toolInstructions(tools) });
+      const session = new LlamaChatSession({ contextSequence: seq, systemPrompt: String(system || '') + toolInstructions(activeTools) });
       try {
+        const activeTools = selectLocalTools(tools, messages);
         const turns = messages.filter((m) => (m.role === 'user' || m.role === 'assistant' || m.role === 'tool') && m.text);
         const last = turns.pop();
         if (!last) return { text: '', toolCalls: [] };
@@ -215,7 +254,7 @@ module.exports = {
           ? `Tool result (${last.name || last.toolCallId || 'tool'}):\n${currentText.slice(-currentLimit)}\nContinue the task using this result.`
           : currentText.slice(0, currentLimit);
         let text = String(await session.prompt(promptText, { maxTokens })).trim();
-        let toolCalls = parseToolCall(text, tools);
+        let toolCalls = parseToolCall(text, activeTools);
         // Retry once when the model clearly attempted a tool call but produced malformed JSON or arguments.
         // Do not expose raw control JSON to the user if the retry also fails.
         if (!toolCalls.length && Array.isArray(tools) && tools.length && /tool[_ ]?call|<tool_call>|function_call/i.test(text)) {
@@ -223,11 +262,11 @@ module.exports = {
             'Your previous response attempted a tool call but it was invalid and was not executed.',
             'Choose only a tool listed below. Include every required argument with the correct type and allowed enum value.',
             'Return only this JSON shape: {"tool_call":{"name":"EXACT_TOOL_NAME","args":{}}}',
-            'Available tools and schemas:', JSON.stringify(compactTools(tools)),
+            'Available tools and schemas:', JSON.stringify(compactTools(activeTools)),
             'Invalid response to correct:', text.slice(0, 2000),
           ].join('\n');
           const repaired = String(await session.prompt(repairPrompt, { maxTokens: Math.min(maxTokens, 400) })).trim();
-          toolCalls = parseToolCall(repaired, tools);
+          toolCalls = parseToolCall(repaired, activeTools);
           if (toolCalls.length) return { text: '', toolCalls };
           text = /[\u0600-\u06FF]/.test(last.text || '') || /[\u0600-\u06FF]/.test(text)
             ? 'لم أتمكن من تنفيذ الطلب بأمان لأن النموذج المحلي أنشأ استدعاء أداة غير صالح. أعد صياغة الطلب أو اختر نموذجًا أقوى.'
@@ -241,5 +280,5 @@ module.exports = {
   },
   async deactivate() { if (state) { try { await state.context.dispose(); await state.model.dispose(); } catch { /* ignore */ } state = null; } },
   // Pure parser is exposed only to the repository's deterministic acceptance checks.
-  __test: { parseToolCall },
+  __test: { parseToolCall, selectLocalTools },
 };
