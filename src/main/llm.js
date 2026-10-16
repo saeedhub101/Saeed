@@ -101,7 +101,7 @@ async function anthropicAgent(s, { system, history, tools, execTool, signal, onT
   const finalSystem = system + '\\n\\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
   const final = await anthropicCall(key, { model: s.llm.anthropic.model, max_tokens: 1800, system: finalSystem, messages: msgs, tools: [] }, signal, onText);
   const finalText = (final.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
-  return [all.trim(), finalText].filter(Boolean).join(' ').trim() || 'I could not produce a verified final summary.';
+  return finalText || 'I could not produce a verified final summary.';
 }
 
 /* ---------- OpenAI-compatible ---------- */
@@ -165,7 +165,7 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
   }
   const finalSystem = system + '\\n\\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
   const final = await openaiCall(p, key, { model: p.model, messages: [{ role: 'system', content: finalSystem }, ...msgs], tools: [], tool_choice: 'none' }, signal, onText);
-  return [all.trim(), String(final.content || '').trim()].filter(Boolean).join(' ').trim() || 'I could not produce a verified final summary.';
+  return String(final.content || '').trim() || 'I could not produce a verified final summary.';
 }
 
 /* ---------- brains that come from add-ons (for example a local Qwen / Llama) ---------- */
@@ -195,7 +195,7 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
   }
   const finalSystem = system + '\\n\\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
   const final = await addons.callProvider('llm', id, { system: finalSystem, messages: msgs, tools: [] }, signal, onText);
-  return [all.trim(), String(final.text || '').trim()].filter(Boolean).join(' ').trim() || 'I could not produce a verified final summary.';
+  return String(final.text || '').trim() || 'I could not produce a verified final summary.';
 }
 
 const runAgent = (s, opts) => (s.llm.provider.startsWith('addon:') ? addonAgent(s, opts) : s.llm.provider === 'anthropic' ? anthropicAgent(s, opts) : openaiAgent(s, opts));
