@@ -76,7 +76,7 @@ try {
     if (!rejected) fail('updater accepted an invalid GitHub repository path: ' + invalidRepo);
   }
   const defaults = require(path.join(root, 'src/main/settings.js')).DEFAULT_SETTINGS;
-  if (defaults.llm.anthropic.model !== 'claude-sonnet-5' || defaults.llm.openai.model !== 'gpt-5.1') fail('default brain models are not current reasoning-capable choices');
+  if (defaults.llm.anthropic.model !== 'claude-sonnet-5' || defaults.llm.openai.model !== 'gpt-6-astra') fail('default brain models are not current reasoning-capable choices');
   if (defaults.updates.repo !== 'saeedhub101/Saeed') fail('default updater repository is not the official Saeed repository');
 } catch (e) { fail('agent orchestration checks could not run: ' + e.message); }
 
