@@ -37,7 +37,31 @@ const forgetFact = (text) => {
 };
 const listFacts = () => loadFacts().map((x) => x.text);
 const removeFactAt = (i) => { const f = loadFacts(), index = Number(i); if (!Number.isInteger(index) || index < 0 || index >= f.length) return false; f.splice(index, 1); writeJson('memory.json', f); return true; };
-const promptText = (limit = 40) => { const f = loadFacts().slice(-limit); return f.length ? '\nThings you know about the user and their world (use them naturally, never recite them):\n- ' + f.map((x) => x.text).join('\n- ') : ''; };
+const normalizeMemory = (s) => String(s || '').toLowerCase()
+  .replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+  .replace(/[^\p{L}\p{N}\s]/gu, ' ').replace(/\s+/g, ' ').trim();
+const MEMORY_STOP = new Set(['the','and','for','with','from','that','this','have','your','you','are','was','will','can','please','من','في','على','الى','عن','هذا','هذه','ذلك','التي','الذي','مع','هو','هي','انا','اريد','كان','يكون','كل','بعد','قبل']);
+function rankFacts(items, query, limit = 8) {
+  const terms = [...new Set(normalizeMemory(query).split(' ').filter((w) => w.length > 2 && !MEMORY_STOP.has(w)))];
+  const recent = items.slice().sort((a, b) => (b.t || 0) - (a.t || 0));
+  if (!terms.length) return recent.slice(0, limit);
+  const scored = recent.map((fact, index) => {
+    const words = normalizeMemory(fact.text).split(' ');
+    const score = terms.reduce((sum, term) => {
+      if (words.includes(term)) return sum + 3;
+      if (term.length >= 4 && words.some((word) => word.length >= 4 && (word.includes(term) || term.includes(word)))) return sum + 1;
+      return sum;
+    }, 0);
+    return { fact, score, index };
+  }).filter((x) => x.score > 0).sort((x, y) => y.score - x.score || x.index - y.index);
+  const selected = scored.slice(0, limit).map((x) => x.fact);
+  for (const fact of recent.slice(0, 3)) if (selected.length < limit && !selected.includes(fact)) selected.push(fact);
+  return selected;
+}
+const promptText = (query = '', limit = 8) => {
+  const f = rankFacts(loadFacts(), query, limit);
+  return f.length ? '\nRelevant things you know about the user and their work (apply only when relevant; do not recite):\n- ' + f.map((x) => x.text).join('\n- ') : '';
+};
 
 /* ---------- reminders ---------- */
 let reminders = null, timer = 0, onFire = () => {};
@@ -68,4 +92,4 @@ const listReminders = () => loadRem().map((r) => ({ id: r.id, text: r.text, at: 
 const cancelReminder = (id) => { const n = loadRem().length; reminders = loadRem().filter((r) => r.id !== id); saveRem(); schedule(); return n === reminders.length ? 'No such reminder.' : 'Cancelled.'; };
 const initReminders = (fire) => { onFire = fire; schedule(); };
 
-module.exports = { addFact, forgetFact, listFacts, removeFactAt, promptText, addReminder, listReminders, cancelReminder, initReminders };
+module.exports = { addFact, forgetFact, listFacts, removeFactAt, promptText, addReminder, listReminders, cancelReminder, initReminders, _test: { normalizeMemory, rankFacts } };
