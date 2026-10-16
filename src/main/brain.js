@@ -73,9 +73,9 @@ function confirmationReason(name, args) {
   if (name === 'browser__type' && args.submit) return 'submitting the current browser form';
   if (name === 'database__execute') {
     const sql = String(args.sql || args.query || args.statement || '');
-    if (/\\b(?:insert|update|delete|drop|alter|truncate|replace|merge|create|grant|revoke)\\b/i.test(sql)) return 'changing database records or schema';
+    if (/\b(?:insert|update|delete|drop|alter|truncate|replace|merge|create|grant|revoke)\b/i.test(sql)) return 'changing database records or schema';
   }
-  if (name === 'run_command' && /(?:remove-item|\\brm\\s+-rf\\b|\\bformat(?:\.com)?\\b|\\bdiskpart\\b|\\bdel\\s+\/s\\b|\\bshutdown(?:\.exe)?\\b|\\brestart-computer\\b|\\bclear-content\\b)/i.test(String(args.command || ''))) {
+  if (name === 'run_command' && /(?:remove-item|\brm\s+-rf\b|\bformat(?:\.com)?\b|\bdiskpart\b|\bdel\s+\/s\b|\bshutdown(?:\.exe)?\b|\brestart-computer\b|\bclear-content\b)/i.test(String(args.command || ''))) {
     return 'running a potentially destructive system command';
   }
   return '';
