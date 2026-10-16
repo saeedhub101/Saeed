@@ -100,7 +100,7 @@ function selectLocalTools(tools, messages) {
   const chosen = new Set();
   const exact = (names) => { for (const t of defs) if (names.includes(t.name)) chosen.add(t.name); };
   const prefix = (prefixes) => { for (const t of defs) if (prefixes.some((p) => t.name.startsWith(p))) chosen.add(t.name); };
-  const base = ['confirm_with_user', 'recall_skills', 'learn_skill', 'update_skill', 'forget_skill', 'remember', 'forget', 'express', 'get_time', 'set_reminder', 'list_reminders', 'cancel_reminder', 'open_item', 'find_files', 'open_path', 'read_file', 'write_file', 'make_folder', 'list_folder', 'file_info', 'http_request', 'system_info', 'web_search', 'web_fetch', 'run_command'];
+  const base = ['confirm_with_user', 'recall_skills', 'learn_skill', 'update_skill', 'forget_skill', 'remember', 'forget', 'express', 'get_time', 'set_reminder', 'list_reminders', 'cancel_reminder', 'open_item', 'find_files', 'open_path', 'read_file', 'write_file', 'make_folder', 'list_folder', 'file_info', 'system_info', 'web_search', 'web_fetch'];
   exact(base);
   const hasAny = (terms) => terms.some((term) => text.includes(term));
   const fileTask = /\b(file|folder|path|save|write|read|copy|move|delete|rename|download|text|txt|csv|json|md)\b/.test(text) || hasAny(['ملف', 'مجلد', 'مسار', 'احفظ', 'اكتب', 'اقرا', 'انسخ', 'انقل', 'احذف', 'حمل', 'تنزيل', 'تحميل']);
@@ -112,6 +112,8 @@ function selectLocalTools(tools, messages) {
   const databaseTask = /\b(database|sql|query|record|records|table)\b/.test(text) || hasAny(['قاعده بيانات', 'استعلام', 'سجل', 'سجلات']);
   const imageTask = /\b(image|picture|photo|screenshot|ocr)\b/.test(text) || hasAny(['صوره', 'صور', 'لقطه', 'اقرا الصوره', 'قراءه الصوره']);
   const characterTask = /\b(character|avatar|animation|pose|emotion|face|viseme|bone|bones|rig|skeleton|glb|wave|dance|gesture|motion)\b/.test(text) || hasAny(['شخصيه', 'حركه', 'عظمه', 'عظام', 'وجه', 'تعابير', 'لوح', 'رقص']);
+  const commandTask = /\b(command line|terminal|powershell|cmd(?:\.exe)?|shell script|run a command|execute command|batch file|\.ps1|\.bat)\b/.test(text) || hasAny(['سطر الاوامر', 'طرفيه', 'تيرمنال', 'باورشيل', 'نفذ امر', 'شغل امر', 'شغل سكربت', 'ملف باتش']);
+  const networkTask = /\b(api|http request|rest request|endpoint|webhook|fetch url|call an api)\b/.test(text) || hasAny(['واجهه برمجيه', 'طلب http', 'استدعاء api', 'رابط api', 'webhook']);
   if (fileTask) exact(['list_folder', 'read_file', 'write_file', 'make_folder', 'copy_path', 'move_path', 'delete_path', 'file_info', 'download_file', 'view_image', 'http_request']);
   if (sheetTask) prefix(['excel__', 'charts__']);
   if (wordTask) prefix(['word__']);
@@ -121,7 +123,9 @@ function selectLocalTools(tools, messages) {
   if (databaseTask) prefix(['database__']);
   if (imageTask || hasImages) { prefix(['ocr__']); if (imageTask) prefix(['desktop-control__']); exact(['view_image']); }
   if (characterTask) prefix(['party-pack__']);
-  const specialized = fileTask || sheetTask || wordTask || pdfTask || browserTask || screenTask || databaseTask || imageTask || characterTask || hasImages;
+  if (commandTask) exact(['run_command']);
+  if (networkTask) exact(['http_request']);
+  const specialized = fileTask || sheetTask || wordTask || pdfTask || browserTask || screenTask || databaseTask || imageTask || characterTask || commandTask || networkTask || hasImages;
   if (!specialized) {
     const words = [...new Set(text.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4))];
     const ranked = defs.filter((t) => t.name.includes('__')).map((t) => {
