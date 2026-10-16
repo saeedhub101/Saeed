@@ -37,6 +37,27 @@ async function* sse(res) {
   }
 }
 
+// Remember failed exact calls for this turn so a model cannot repeat a broken operation indefinitely.
+function createToolRunner(execTool, signal) {
+  const failed = new Set();
+  return async (name, args) => {
+    const key = String(name) + ':' + JSON.stringify(args || {});
+    if (failed.has(key)) return 'This exact tool call already failed earlier in this task and was not repeated. Use the error to choose another tool, correct the arguments, or explain the blocker.';
+    try {
+      const result = await execTool(name, args || {});
+      const summary = rText(result);
+      if ((result && typeof result === 'object' && (result.ok === false || result.success === false || result.error))
+        || /\\b(?:error|denied|failed|failure|could not|couldn.t|unknown tool|tool call rejected|invalid|not found|does not exist|permission denied)\\b/i.test(summary)
+        || /\\bHTTP [45]\\d\\d\\b/i.test(summary)) failed.add(key);
+      return result;
+    } catch (error) {
+      if (signal && signal.aborted) throw error;
+      failed.add(key);
+      return 'Tool execution error: ' + String(error && error.message || error) + '. Diagnose this result and try a different permitted approach if possible.';
+    }
+  };
+}
+
 /* ---------- Claude ---------- */
 async function anthropicCall(key, body, signal, onText) {
   const res = await check(await fetch('https://api.anthropic.com/v1/messages', {
@@ -73,6 +94,7 @@ async function anthropicAgent(s, { system, history, tools, execTool, signal, onT
   const msgs = history.map((m) => ({ role: m.role, content: aContent(m) }));
   const toolDefs = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema }));
   let all = '';
+  const runTool = createToolRunner(execTool, signal);
   for (let i = 0; i < maxSteps(s); i++) {
     const j = await anthropicCall(key, { model: s.llm.anthropic.model, max_tokens: 4096, system, messages: msgs, tools: toolDefs }, signal, onText);
     msgs.push({ role: 'assistant', content: j.content });
@@ -83,11 +105,7 @@ async function anthropicAgent(s, { system, history, tools, execTool, signal, onT
     const results = [];
     for (const u of uses) {
       let r;
-      try { r = await execTool(u.name, u.input || {}); }
-      catch (error) {
-        if (signal && signal.aborted) throw error;
-        r = 'Tool execution error: ' + String(error && error.message || error) + '. Diagnose this result and try a different permitted approach if possible.';
-      }
+      r = await runTool(u.name, u.input || {});
       const img = rImage(r);
       results.push({
         type: 'tool_result', tool_use_id: u.id,
@@ -143,6 +161,7 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
   const toolDefs = tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.schema } }));
   const key = secrets.get(name);
   let all = '';
+  const runTool = createToolRunner(execTool, signal);
   for (let i = 0; i < maxSteps(s); i++) {
     const m = await openaiCall(p, key, { model: p.model, messages: msgs, tools: toolDefs, tool_choice: 'auto' }, signal, onText);
     msgs.push({ ...m, content: m.content || null });
@@ -152,11 +171,7 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
     for (const tc of m.tool_calls) {
       let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* invalid JSON is surfaced to the model */ }
       let r;
-      try { r = await execTool(tc.function.name, args); }
-      catch (error) {
-        if (signal && signal.aborted) throw error;
-        r = 'Tool execution error: ' + String(error && error.message || error) + '. Diagnose this result and try a different permitted approach if possible.';
-      }
+      r = await runTool(tc.function.name, args);
       msgs.push({ role: 'tool', tool_call_id: tc.id, content: rText(r) || 'Tool returned no content. Verify the state before assuming success.' });
       const img = rImage(r);
       if (img) images.push({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.data}` } });
@@ -176,6 +191,7 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
   const msgs = history.map((m) => ({ role: m.role, text: m.text, images: m.images }));
   const defs = tools.map((t) => ({ name: t.name, description: t.description, schema: t.schema }));
   let all = '';
+  const runTool = createToolRunner(execTool, signal);
   for (let i = 0; i < maxSteps(s); i++) {
     const r = await addons.callProvider('llm', id, { system, messages: msgs, tools: defs }, signal, onText);
     if (r.text) all += (all ? ' ' : '') + r.text;
@@ -185,11 +201,7 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
     msgs.push({ role: 'assistant', text: r.text || '[Requested tool: ' + r.toolCalls.map((tc) => tc.name).join(', ') + ']', toolCalls: r.toolCalls });
     for (const tc of r.toolCalls) {
       let out;
-      try { out = await execTool(tc.name, tc.args || {}); }
-      catch (error) {
-        if (signal && signal.aborted) throw error;
-        out = 'Tool execution error: ' + String(error && error.message || error) + '. Diagnose this result and try a different permitted approach if possible.';
-      }
+      out = await runTool(tc.name, tc.args || {});
       msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.name, text: rText(out) || 'Tool returned no content. Verify the state before assuming success.' });
     }
   }
@@ -199,4 +211,4 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
 }
 
 const runAgent = (s, opts) => (s.llm.provider.startsWith('addon:') ? addonAgent(s, opts) : s.llm.provider === 'anthropic' ? anthropicAgent(s, opts) : openaiAgent(s, opts));
-module.exports = { runAgent };
+module.exports = { runAgent, _test: { createToolRunner } };
