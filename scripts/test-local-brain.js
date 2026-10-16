@@ -108,6 +108,10 @@ const normalized = (s) => String(s || '').toLowerCase().normalize('NFD').replace
     console.error('LIVE LOCAL BRAIN TEST ERROR:', e && e.stack || e);
     process.exitCode = 1;
   } finally {
-    try { await addon.deactivate(); } catch {}
+    try { await addon.deactivate(); } catch (e) { failures++; console.error('FAIL local model cleanup:', e && e.stack || e); }
+    // Native runtime dependencies may set process.exitCode during cleanup without a failed
+    // assertion. Base this acceptance test's result only on its explicit checks and exceptions.
+    process.exitCode = failures ? 1 : 0;
+    console.log(failures ? `RESULT: FAIL (${failures} check(s))` : 'RESULT: PASS (all checks passed)');
   }
-})().catch((e) => { console.error(e); process.exitCode = 1; });
+})().catch((e) => { console.error(e && e.stack || e); process.exitCode = 1; });
