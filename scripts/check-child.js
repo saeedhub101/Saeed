@@ -62,6 +62,20 @@ try {
     let rejected = false; try { llmTest.parseToolArguments(malformed); } catch { rejected = true; }
     if (!rejected) fail('invalid tool arguments were accepted: ' + malformed);
   }
+  const autoSearchCases = [
+    ['Where is Rome?', true],
+    ['What is the weather in Jordan today?', true],
+    ['كم الساعة في إيطاليا؟', true],
+    ['أين تقع روما؟', true],
+    ['ما عاصمة إيطاليا؟', true],
+    ['Open Excel', false],
+    ['How do I open Excel?', false],
+    ['افتح الإكسل', false],
+    ['احسب 2 + 2', false],
+  ];
+  for (const [question, expected] of autoSearchCases) {
+    if (llmTest.shouldAutoSearch(question) !== expected) fail('automatic web-search classification mismatch for: ' + question);
+  }
   const reasoningSettings = { llm: { reasoningEffort: 'high' } };
   if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-5.1').reasoning_effort !== 'high') fail('GPT-5 reasoning effort was not enabled');
   if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-5-mini').reasoning_effort !== 'high') fail('GPT-5 mini reasoning effort was not enabled');
