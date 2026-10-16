@@ -5,6 +5,7 @@ const secrets = require('./secrets');
 const brain = require('./brain');
 
 let ws = null, bus = null, rate = 24000, lastUser = '', ready = false, ctx = null;
+const toolPolicy = { confirmedNextAction: false };
 
 const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
 
@@ -29,6 +30,7 @@ async function runTool(ev) {
   try { args = JSON.parse(ev.arguments || '{}'); } catch { /* empty */ }
   const s = ctx.getSettings();
   const out = await brain.execTool(s, ev.name, args, {
+    policy: toolPolicy,
     onIntent: (n) => bus.avatar({ type: 'intent', name: n }),
     onTool: (t) => bus.chat({ type: 'tool', text: `${t.name} ${JSON.stringify(t.args).slice(0, 140)}` }),
   });
@@ -48,6 +50,7 @@ async function onEvent(ev) {
       bus.avatar({ type: 'rt-interrupt' }); bus.chat({ type: 'state', text: 'listening…' });
       break;
     case 'conversation.item.input_audio_transcription.completed':
+      toolPolicy.confirmedNextAction = false;
       lastUser = ev.transcript || '';
       if (lastUser.trim()) bus.chat({ type: 'message', role: 'user', text: lastUser.trim(), source: 'voice' });
       break;
@@ -68,7 +71,7 @@ async function onEvent(ev) {
 
 async function start(o) {
   stop();
-  ctx = o; bus = o.bus; ready = false; lastUser = '';
+  ctx = o; bus = o.bus; ready = false; lastUser = ''; toolPolicy.confirmedNextAction = false;
   const s = o.getSettings(), r = s.realtime;
   if (r.provider === 'off') throw new Error('Realtime is off. Choose a provider in Settings → Live conversation.');
   const p = r.provider === 'custom' ? r.custom : r.openai;
@@ -103,7 +106,7 @@ async function start(o) {
 
 function audio(buf) { send({ type: 'input_audio_buffer.append', audio: Buffer.from(buf).toString('base64') }); }
 function interrupt() { send({ type: 'response.cancel' }); }
-function stop() { if (ws) { const w = ws; ws = null; try { w.close(); } catch { /* closed */ } } }
+function stop() { toolPolicy.confirmedNextAction = false; if (ws) { const w = ws; ws = null; try { w.close(); } catch { /* closed */ } } }
 const active = () => !!ws;
 
 module.exports = { start, stop, audio, interrupt, active };
