@@ -114,7 +114,16 @@ function validateToolArgs(value, schema, at = 'args') {
   return null;
 }
 
-async function execTool(settings, name, args, { onIntent, onTool, signal, trace } = {}) {
+async function execTool(settings, name, args, { onIntent, onTool, signal, trace, policy } = {}) {
+  const def = toolDefs().find((tool) => tool.name === name);
+  if (!def) return 'Tool call rejected: "' + String(name) + '" is not available.';
+  const issue = validateToolArgs(args, def.schema);
+  if (issue) return 'Tool call rejected because its arguments are invalid: ' + issue + '. Correct the arguments and try again.';
+  const confirmation = confirmationReason(name, args);
+  if (confirmation && !(policy && policy.confirmedNextAction)) {
+    return 'Action paused: explicit confirmation is required before ' + confirmation + '. Call confirm_with_user with a clear question, then retry only if the user says yes.';
+  }
+  if (confirmation && policy) policy.confirmedNextAction = false;
   if (onTool) onTool({ name, args });
   if (trace) traceCall(trace, name, args);
   if (name === 'express') { if (INTENTS.includes(args.intent) && onIntent) onIntent(args.intent); return 'ok'; }
@@ -122,7 +131,9 @@ async function execTool(settings, name, args, { onIntent, onTool, signal, trace 
   if (name === 'get_time') return new Date().toString();
   if (name === 'confirm_with_user') {
     const r = await dialog.showMessageBox({ type: 'question', title: 'Saeed asks you', message: String(args.question || 'Continue?'), buttons: ['Yes, go ahead', 'No'], defaultId: 1, cancelId: 1, noLink: true });
-    return r.response === 0 ? 'The user said yes.' : 'The user said no. Do not continue with this step.';
+    const result = r.response === 0 ? 'The user said yes.' : 'The user said no. Do not continue with this step.';
+    if (policy) policy.confirmedNextAction = result === 'The user said yes.';
+    return result;
   }
   if (name === 'recall_skills') { const r = skills.recall(args.query); return r.length ? JSON.stringify(r.map(({ id, name, app, steps, fields, verify, notes, uses, failures }) => ({ id, name, app, steps, fields, verify, notes, usedBefore: uses, failedBefore: failures }))) : 'No matching skill was learned yet.'; }
   if (name === 'learn_skill') return skills.learn(args);
@@ -221,19 +232,13 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
   const customPrompt = String(settings.llm.systemPrompt || '').trim();
   // A custom prompt should add preferences, not silently remove Saeed's core tool-use and verification rules.
   const system = DEFAULT_PROMPT + (customPrompt ? `\n\nAdditional user instructions (apply when compatible with the core rules):\n${customPrompt}` : '') + procedureText(settings, text) + (settings.memory && settings.memory.enabled ? memory.promptText() : '') + skills.promptText(text) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
-  const trace = []; let calledLearn = false, confirmedNextAction = false;
+  const trace = [], policy = { confirmedNextAction: false }; let calledLearn = false;
   try {
     const availableTools = toolDefs();
     const reply = await llm.runAgent(settings, {
       system, history: recent, tools: availableTools, signal, onText,
       execTool: async (name, args) => {
-        const def = availableTools.find((tool) => tool.name === name);
-        if (!def) return 'Tool call rejected: "' + String(name) + '" is not available.';
-        const issue = validateToolArgs(args || {}, def.schema);
-        if (issue) return 'Tool call rejected because its arguments are invalid: ' + issue + '. Correct the arguments and try again.';
-        const confirmation = confirmationReason(name, args || {});
-        if (confirmation && !confirmedNextAction) return 'Action paused: explicit confirmation is required before ' + confirmation + '. Call confirm_with_user with a clear question, then retry only if the user says yes.';
-        if (confirmation) confirmedNextAction = false;
+        if (!availableTools.some((tool) => tool.name === name)) return 'Tool call rejected: "' + String(name) + '" is not available in this turn.';
         if (name === 'learn_skill' || name === 'update_skill') calledLearn = true;
         const traceStart = trace.length;
         const resultText = (value) => typeof value === 'string' ? value : String((value && typeof value.text === 'string' && value.text) || (value && value.error) || '');
@@ -245,8 +250,7 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
           }
         };
         try {
-          const result = await execTool(settings, name, args, { onIntent, onTool, signal, trace });
-          if (name === 'confirm_with_user') confirmedNextAction = result === 'The user said yes.';
+          const result = await execTool(settings, name, args, { onIntent, onTool, signal, trace, policy });
           const summary = resultText(result);
           const explicitFailure = result && typeof result === 'object'
             && (result.ok === false || result.success === false || Boolean(result.error));
