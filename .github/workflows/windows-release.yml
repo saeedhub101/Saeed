@@ -143,7 +143,7 @@ jobs:
           }
           $expectedVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $manifest = Get-Content "dist/latest.yml" -Raw
-          if ($manifest -notmatch "(?m)^version: $([regex]::Escape($expectedVersion))$") {
+          if ($manifest -notmatch "(?m)^version:\s*$([regex]::Escape($expectedVersion))\s*$") {
             Write-Error "Updater metadata version does not match package.json version $expectedVersion."
             exit 1
           }
