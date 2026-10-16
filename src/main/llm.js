@@ -251,8 +251,8 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
     const query = String(latestUser.text || '').trim();
     const result = await runTool('web_search', { query, count: 6 });
     msgs.push({ role: 'tool', toolCallId: 'automatic-web-search', name: 'web_search',
-      text: 'Automatic preliminary web search for the current user question (' + query + '):\\n' + (rText(result) || 'Search returned no readable results.') });
-    agentSystem += '\\n\\nAn automatic preliminary web search was already performed for this factual question. Inspect its result before answering. If it contains useful results, use web_fetch to read a relevant source when needed. If results are empty, irrelevant, or an error, try a meaningfully different search query before giving up. Do not repeat the identical query. Distinguish verified facts from uncertainty.';
+      text: 'Automatic preliminary web search for the current user question (' + query + '):\n' + (rText(result) || 'Search returned no readable results.') });
+    agentSystem += '\n\nAn automatic preliminary web search was already performed for this factual question. Inspect its result before answering. If it contains useful results, use web_fetch to read a relevant source when needed. If results are empty, irrelevant, or an error, try a meaningfully different search query before giving up. Do not repeat the identical query. Distinguish verified facts from uncertainty.';
   }
   for (let i = 0; i < maxSteps(s); i++) {
     const r = await addons.callProvider('llm', id, { system: agentSystem, messages: msgs, tools: defs }, signal, onText);
