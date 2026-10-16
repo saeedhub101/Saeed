@@ -82,16 +82,26 @@ async function anthropicAgent(s, { system, history, tools, execTool, signal, onT
     if (j.stop_reason !== 'tool_use' || !uses.length) return all.trim();
     const results = [];
     for (const u of uses) {
-      const r = await execTool(u.name, u.input || {});
+      let r;
+      try { r = await execTool(u.name, u.input || {}); }
+      catch (error) {
+        if (signal && signal.aborted) throw error;
+        r = 'Tool execution error: ' + String(error && error.message || error) + '. Diagnose this result and try a different permitted approach if possible.';
+      }
       const img = rImage(r);
       results.push({
         type: 'tool_result', tool_use_id: u.id,
-        content: img ? [{ type: 'text', text: rText(r) || 'Image' }, { type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } }] : rText(r) || 'Done.',
+        content: img ? [{ type: 'text', text: rText(r) || 'Image' }, { type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } }] : rText(r) || 'Tool returned no content. Verify the state before assuming success.',
       });
     }
     msgs.push({ role: 'user', content: results });
   }
-  return (all + ' I stopped because the task needed too many steps.').trim();
+  // The last permitted tool round may have returned useful evidence without leaving a
+  // model turn to interpret it. Make a final tools-disabled synthesis call.
+  const finalSystem = system + '\\n\\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
+  const final = await anthropicCall(key, { model: s.llm.anthropic.model, max_tokens: 1800, system: finalSystem, messages: msgs, tools: [] }, signal, onText);
+  const finalText = (final.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
+  return [all.trim(), finalText].filter(Boolean).join(' ').trim() || 'I could not produce a verified final summary.';
 }
 
 /* ---------- OpenAI-compatible ---------- */
@@ -140,15 +150,22 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
     if (!m.tool_calls || !m.tool_calls.length) return all.trim();
     const images = [];
     for (const tc of m.tool_calls) {
-      let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* ignore */ }
-      const r = await execTool(tc.function.name, args);
-      msgs.push({ role: 'tool', tool_call_id: tc.id, content: rText(r) || 'Done.' });
+      let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* invalid JSON is surfaced to the model */ }
+      let r;
+      try { r = await execTool(tc.function.name, args); }
+      catch (error) {
+        if (signal && signal.aborted) throw error;
+        r = 'Tool execution error: ' + String(error && error.message || error) + '. Diagnose this result and try a different permitted approach if possible.';
+      }
+      msgs.push({ role: 'tool', tool_call_id: tc.id, content: rText(r) || 'Tool returned no content. Verify the state before assuming success.' });
       const img = rImage(r);
       if (img) images.push({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.data}` } });
     }
     if (images.length) msgs.push({ role: 'user', content: [{ type: 'text', text: '(image returned by the tool)' }, ...images] });
   }
-  return (all + ' I stopped because the task needed too many steps.').trim();
+  const finalSystem = system + '\\n\\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
+  const final = await openaiCall(p, key, { model: p.model, messages: [{ role: 'system', content: finalSystem }, ...msgs], tools: [], tool_choice: 'none' }, signal, onText);
+  return [all.trim(), String(final.content || '').trim()].filter(Boolean).join(' ').trim() || 'I could not produce a verified final summary.';
 }
 
 /* ---------- brains that come from add-ons (for example a local Qwen / Llama) ---------- */
@@ -167,11 +184,18 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
     // This marker is internal context only; it is never added to the visible answer.
     msgs.push({ role: 'assistant', text: r.text || '[Requested tool: ' + r.toolCalls.map((tc) => tc.name).join(', ') + ']', toolCalls: r.toolCalls });
     for (const tc of r.toolCalls) {
-      const out = await execTool(tc.name, tc.args || {});
-      msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.name, text: rText(out) });
+      let out;
+      try { out = await execTool(tc.name, tc.args || {}); }
+      catch (error) {
+        if (signal && signal.aborted) throw error;
+        out = 'Tool execution error: ' + String(error && error.message || error) + '. Diagnose this result and try a different permitted approach if possible.';
+      }
+      msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.name, text: rText(out) || 'Tool returned no content. Verify the state before assuming success.' });
     }
   }
-  return (all + ' I stopped because the task needed too many steps.').trim();
+  const finalSystem = system + '\\n\\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
+  const final = await addons.callProvider('llm', id, { system: finalSystem, messages: msgs, tools: [] }, signal, onText);
+  return [all.trim(), String(final.text || '').trim()].filter(Boolean).join(' ').trim() || 'I could not produce a verified final summary.';
 }
 
 const runAgent = (s, opts) => (s.llm.provider.startsWith('addon:') ? addonAgent(s, opts) : s.llm.provider === 'anthropic' ? anthropicAgent(s, opts) : openaiAgent(s, opts));
