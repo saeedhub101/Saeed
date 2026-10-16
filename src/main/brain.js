@@ -229,9 +229,28 @@ function load() {
   try { hist = JSON.parse(fs.readFileSync(file(), 'utf8')); } catch { hist = []; }
   return hist;
 }
+function persistHistory() {
+  const target = file(), tmp = target + '.tmp';
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(load().slice(-200)), 'utf8');
+    fs.renameSync(tmp, target);
+  } catch (error) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* cleanup is best effort */ }
+    throw error;
+  }
+}
 function save() {
   clearTimeout(timer);
-  timer = setTimeout(() => fs.writeFile(file(), JSON.stringify(load().slice(-200)), () => {}), 500);
+  timer = setTimeout(() => {
+    timer = null;
+    try { persistHistory(); } catch (error) { console.error('[history] Could not save conversation:', error); }
+  }, 500);
+}
+function flushHistory() {
+  clearTimeout(timer);
+  timer = null;
+  persistHistory();
 }
 
 // Company procedures whose keywords appear in the request are added to the instructions.
@@ -303,4 +322,4 @@ const history = () => load().slice(-100);
 function clear() { hist = []; save(); }
 
 const defaultPrompt = () => DEFAULT_PROMPT;
-module.exports = { ask, remember, history, clear, toolDefs, execTool, defaultPrompt, validateToolArgs, confirmationReason, confirmationSignature };
+module.exports = { ask, remember, history, clear, flushHistory, toolDefs, execTool, defaultPrompt, validateToolArgs, confirmationReason, confirmationSignature };

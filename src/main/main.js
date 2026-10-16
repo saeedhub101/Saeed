@@ -435,7 +435,7 @@ ipcMain.handle('memory:list', () => memory.listFacts());
 ipcMain.handle('memory:add', (_e, t) => memory.addFact(t));
 ipcMain.handle('memory:remove', (_e, i) => { memory.removeFactAt(i); return true; });
 ipcMain.handle('skills:list', () => skills.list());
-ipcMain.handle('skills:remove', (_e, i) => { skills.removeAt(i); return true; });
+ipcMain.handle('skills:remove', (_e, i) => skills.removeAt(i));
 ipcMain.handle('test:tts', async (_e, text) => {
   try { const a = await providers.synthesize(cfg.settings, text); return { ok: true, mime: a.mime, bytes: a.bytes }; }
   catch (e) { return { ok: false, error: e.message }; }
@@ -461,6 +461,7 @@ app.on('before-quit', () => {
   clearTimeout(saveTimer);
   saveTimer = null;
   try { persistCfg(); } catch (error) { console.error('[config] Could not flush settings before quit:', error); }
+  try { brain.flushHistory(); } catch (error) { console.error('[history] Could not flush conversation before quit:', error); }
 });
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.whenReady().then(() => {

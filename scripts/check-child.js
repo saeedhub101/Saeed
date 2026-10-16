@@ -122,6 +122,13 @@ try {
   const mainLifecycleSource = fs.readFileSync(path.join(root, 'src/main/main.js'), 'utf8');
   if (!mainLifecycleSource.includes('function persistCfg()') || !mainLifecycleSource.includes("fs.renameSync(tmp, target)")) fail('configuration persistence is not atomic');
   if (!mainLifecycleSource.includes("app.on('before-quit'") || !mainLifecycleSource.includes('persistCfg();')) fail('configuration is not flushed before application exit');
+  const historySource = fs.readFileSync(path.join(root, 'src/main/brain.js'), 'utf8');
+  if (!historySource.includes('function persistHistory()') || !historySource.includes("fs.renameSync(tmp, target)")) fail('conversation history is not persisted atomically');
+  if (!historySource.includes('function flushHistory()') || !historySource.includes('flushHistory,')) fail('conversation history has no explicit flush operation');
+  if (!mainLifecycleSource.includes('brain.flushHistory()')) fail('conversation history is not flushed before application exit');
+  const skillsSource = fs.readFileSync(path.join(root, 'src/main/skills.js'), 'utf8');
+  if (!/function removeAt\(i\).*Number\.isInteger\(index\).*index < 0.*index >= l\.length/.test(skillsSource)) fail('learned-skill removal does not validate its index');
+  if (!mainLifecycleSource.includes("ipcMain.handle('skills:remove', (_e, i) => skills.removeAt(i))")) fail('skills removal IPC does not return the actual result');
   const addonsSource = fs.readFileSync(path.join(root, 'src/main/addons.js'), 'utf8');
   if (!addonsSource.includes('finally { clearTimeout(timeout); }')) fail('add-on call timeout timer is not cleaned up');
   if (!addonsSource.includes('p.pending.clear();') || !addonsSource.includes('p.streams.clear();')) fail('exited add-on processes retain pending IPC or stream references');

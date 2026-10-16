@@ -74,7 +74,7 @@ function forget(id) {
 }
 
 const list = () => load();
-function removeAt(i) { const l = load(); l.splice(i, 1); save(); }
+function removeAt(i) { const l = load(), index = Number(i); if (!Number.isInteger(index) || index < 0 || index >= l.length) return false; l.splice(index, 1); save(); return true; }
 
 // Added to the brain's system prompt when a skill's keywords match the request.
 function promptText(query) {
