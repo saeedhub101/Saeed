@@ -1,6 +1,6 @@
 {
   "name": "avatar-agent",
-  "productName": "Avatar Agent",
+  "productName": "Saeed",
   "version": "0.7.0",
   "description": "Saeed: desktop 3D avatar assistant (voice, chat, brain) with a studio for bones, poses and motions.",
   "main": "src/main/main.js",
@@ -27,7 +27,7 @@
   },
   "build": {
     "appId": "com.avataragent.app",
-    "productName": "Avatar Agent",
+    "productName": "Saeed",
     "directories": {
       "output": "dist"
     },
@@ -52,7 +52,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Avatar Agent"
+      "shortcutName": "Saeed"
     },
     "asarUnpack": [
       "src/main/addon-host.js"
@@ -60,8 +60,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "OWNER",
-        "repo": "saeed"
+        "owner": "saeedhub101",
+        "repo": "Saeed"
       }
     ],
     "extraResources": [
