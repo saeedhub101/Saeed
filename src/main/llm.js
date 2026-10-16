@@ -91,7 +91,15 @@ async function anthropicCall(key, body, signal, onText) {
       else if (ev.delta.type === 'input_json_delta') b._json += ev.delta.partial_json;
     } else if (ev.type === 'content_block_stop') {
       const b = content[ev.index];
-      if (b && b.type === 'tool_use') { try { b.input = b._json ? JSON.parse(b._json) : {}; } catch { b.input = {}; } delete b._json; }
+      if (b && b.type === 'tool_use') {
+        try { b.input = b._json ? parseToolArguments(b._json) : {}; }
+        catch {
+          b.input = {};
+          // Keep the marker local-only; it is not serialized into the provider's assistant message.
+          Object.defineProperty(b, '_invalidInput', { value: true, enumerable: false });
+        }
+        delete b._json;
+      }
     } else if (ev.type === 'message_delta' && ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
     else if (ev.type === 'error') throw new Error('Claude: ' + ((ev.error && ev.error.message) || 'stream error'));
   }
@@ -115,8 +123,9 @@ async function anthropicAgent(s, { system, history, tools, execTool, signal, onT
     if (j.stop_reason !== 'tool_use' || !uses.length) return text.trim() || all.trim();
     const results = [];
     for (const u of uses) {
-      let r;
-      r = await runTool(u.name, u.input || {});
+      const r = u._invalidInput
+        ? 'Tool was not executed because the model returned invalid JSON arguments. Retry with valid JSON matching the tool schema.'
+        : await runTool(u.name, u.input || {});
       const img = rImage(r);
       results.push({
         type: 'tool_result', tool_use_id: u.id,
