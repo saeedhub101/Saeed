@@ -105,7 +105,25 @@ function selectLocalTools(tools, messages) {
   const userText = followUp && previous ? previous + ' ' + latest : latest;
   const text = userText.toLowerCase().replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
   const recentToolContext = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role === 'tool').slice(-2).map((m) => String(m.text || '').slice(-600)).join(' ');
-  const semanticText = (text + ' ' + recentToolContext.toLowerCase()).replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  // Bridge common Arabic intents to English tool descriptions. The local model cannot select a tool
+  // it never sees, so bilingual retrieval is part of the runtime, not just a prompt instruction.
+  const arabicIntentAliases = [
+    [/طقس|الجو|حراره|درجة الحرارة|درجات الحرارة/u, 'weather forecast temperature'],
+    [/الساعه|الوقت|توقيت|كم الساعة/u, 'time timezone current time'],
+    [/ابحث|بحث|دور|فتش|معلومات|مصادر|اخبار/u, 'search web internet sources news'],
+    [/ترجم|ترجمه/u, 'translate language'],
+    [/لخص|تلخيص|ملخص/u, 'summarize document text'],
+    [/اشرح|شرح|فسر|تفسير/u, 'explain documentation'],
+    [/افتح|شغل|ابدأ/u, 'open launch application file'],
+    [/اكسل|جدول|جداول|حسابات|ميزانيه/u, 'excel spreadsheet workbook calculate'],
+    [/صوره|صور|ارسم|تصميم|صمم/u, 'image picture screenshot design'],
+    [/موقع|متصفح|صفحه|رابط|انترنت/u, 'browser website web search internet'],
+    [/ملف|مجلد|مستند|احفظ|اكتب|اقرا|انسخ|انقل|احذف|حمل|تحميل/u, 'file folder document save write read copy move delete download'],
+    [/اضغط|انقر|اكبس|زر|شاشه|نافذه/u, 'desktop control screen window button click'],
+  ];
+  const normalizedLatest = latest.toLowerCase().replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  const intentHints = arabicIntentAliases.filter(([re]) => re.test(normalizedLatest)).map(([, hint]) => hint).join(' ');
+  const semanticText = (text + ' ' + recentToolContext.toLowerCase() + ' ' + intentHints).replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
   const hasImages = (Array.isArray(messages) ? messages : []).some((m) => m && Array.isArray(m.images) && m.images.length > 0);
   const chosen = new Set();
   const exact = (names) => { for (const t of defs) if (names.includes(t.name)) chosen.add(t.name); };
@@ -192,6 +210,8 @@ function toolInstructions(tools) {
     '',
     'TOOLS: You may request one tool per response when it is useful. Only use a tool listed below.',
     'Understand the user\'s intent even with typos, informal language, dialect, or Arabic/English mixed together. Prefer Arabic when the user writes Arabic.',
+    'For current facts, weather, time zones, recent events, changing prices, or when uncertain about a factual answer, use web_search and web_fetch when available before answering. Do not pretend that searching alone proves a claim.',
+    'For broad or unfamiliar tasks, infer the desired outcome, inspect relevant tools and evidence, then act. Ask one concise clarification only when two plausible interpretations would materially change the result or a required detail cannot be safely inferred.',
     'To request a tool, output exactly one JSON object and nothing else in this format:',
     '{"tool_call":{"name":"EXACT_TOOL_NAME","args":{}}}',
     'Example: for an Arabic request like افتح الاكسل, choose the matching available app-opening tool and provide its required name argument.',
