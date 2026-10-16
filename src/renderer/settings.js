@@ -85,12 +85,24 @@ function llmSection() {
   if (c.provider.startsWith('addon:')) {
     kids.push(note('This brain runs inside an add-on (for example a local Qwen or Llama model). Its options are in the Add-ons window. Small local models are fast and private but cannot use tools as well as Claude.'), openAddons());
   } else if (c.provider === 'anthropic') {
-    const dl = h('datalist', { id: 'claude-models' }, ['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5'].map((m) => h('option', { value: m })));
+    const dl = h('datalist', { id: 'claude-models' }, ['claude-sonnet-5', 'claude-haiku-4-5-20251001', 'claude-opus-5'].map((m) => h('option', { value: m })));
     const model = T(c.anthropic, 'model'); model.setAttribute('list', 'claude-models');
     kids.push(row('Model', model, dl), keyField('anthropic', 'Anthropic key'), note('Haiku answers fastest, which feels best in voice conversation. Sonnet is smarter.'));
   } else {
     const p = c[c.provider];
-    kids.push(row('Base URL', T(p, 'baseUrl')), row('Model', T(p, 'model')), keyField(c.provider, 'API key'));
+    const model = T(p, 'model');
+    if (c.provider === 'openai') {
+      const dl = h('datalist', { id: 'openai-models' }, ['gpt-5.1', 'gpt-5', 'gpt-5-mini'].map((m) => h('option', { value: m })));
+      model.setAttribute('list', 'openai-models');
+      kids.push(
+        row('Base URL', T(p, 'baseUrl')),
+        row('Model', model, dl),
+        row('Reasoning effort', SEL(c, 'reasoningEffort', [['low', 'Low — faster'], ['medium', 'Medium'], ['high', 'High — strongest reasoning']])),
+        note('High reasoning is sent only to supported GPT-5 models. Model usage is billed by your provider.'),
+        keyField(c.provider, 'API key'));
+    } else {
+      kids.push(row('Base URL', T(p, 'baseUrl')), row('Model', model), keyField(c.provider, 'API key'));
+    }
   }
   kids.push(
     row('Remembered turns', bind(c, 'maxTurns', h('input', { type: 'number', min: 2, max: 40, value: c.maxTurns }), Number)),
