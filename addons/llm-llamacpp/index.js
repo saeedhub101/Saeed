@@ -93,10 +93,10 @@ function selectLocalTools(tools, messages) {
   const wordTask = /\b(word|docx|document|letter|report)\b/.test(text) || hasAny(['وورد', 'مستند', 'خطاب', 'تقرير', 'رساله']);
   const pdfTask = /\b(pdf|invoice|receipt)\b/.test(text) || hasAny(['فاتوره', 'بي دي اف']);
   const browserTask = /\b(browser|website|webpage|site|login|sign in|web form)\b/.test(text) || hasAny(['متصفح', 'موقع', 'صفحه', 'سجل الدخول', 'تسجيل الدخول', 'موقع ويب']);
-  const screenTask = /\b(screen|desktop|window|button|click|keyboard|mouse|program|application|ui automation)\b/.test(text) || hasAny(['شاشه', 'نافذه', 'زر', 'اضغط', 'اكبس', 'انقر', 'برنامج', 'واجهه']);
+  const screenTask = /\b(screen|desktop|window|button|click|keyboard|mouse|program|application|ui automation|volume|brightness|audio|microphone|mic|sound)\b/.test(text) || hasAny(['شاشه', 'نافذه', 'زر', 'اضغط', 'اكبس', 'انقر', 'برنامج', 'واجهه', 'صوت', 'مستوى الصوت', 'ميكروفون', 'سطوع']);
   const databaseTask = /\b(database|sql|query|record|records|table)\b/.test(text) || hasAny(['قاعده بيانات', 'استعلام', 'سجل', 'سجلات']);
   const imageTask = /\b(image|picture|photo|screenshot|ocr)\b/.test(text) || hasAny(['صوره', 'صور', 'لقطه', 'اقرا الصوره', 'قراءه الصوره']);
-  const characterTask = /\b(character|avatar|animation|pose|emotion|face|viseme)\b/.test(text) || hasAny(['شخصيه', 'حركه', 'عظمه', 'عظام', 'وجه', 'تعابير']);
+  const characterTask = /\b(character|avatar|animation|pose|emotion|face|viseme|bone|bones|rig|skeleton|glb|wave|dance|gesture|motion)\b/.test(text) || hasAny(['شخصيه', 'حركه', 'عظمه', 'عظام', 'وجه', 'تعابير', 'لوح', 'رقص']);
   if (fileTask) exact(['list_folder', 'read_file', 'write_file', 'make_folder', 'copy_path', 'move_path', 'delete_path', 'file_info', 'download_file', 'view_image', 'http_request']);
   if (sheetTask) prefix(['excel__', 'charts__']);
   if (wordTask) prefix(['word__']);
