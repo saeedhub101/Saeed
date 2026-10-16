@@ -180,6 +180,8 @@ try {
     'independent read-back or status check',
     'Preserve the user',
     'passing build is not proof',
+    'newest user request as the active goal',
+    'every requested deliverable',
   ]) if (!cognitivePrompt.includes(rule)) fail('core agent instructions missing: ' + rule);
   const validate = require(path.join(root, 'src/main/brain.js')).validateToolArgs;
   const nested = { type: 'object', properties: { profile: { type: 'object', properties: { age: { type: 'integer', minimum: 0 } }, required: ['age'] } }, required: ['profile'] };
