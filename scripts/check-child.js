@@ -119,6 +119,8 @@ try {
   const signature = require(path.join(root, 'src/main/brain.js')).confirmationSignature;
   if (signature('delete_path', { path: 'Documents/a.txt' }) === signature('delete_path', { path: 'Documents/b.txt' })) fail('confirmation signature did not bind approval to the exact target');
   if (signature('delete_path', { path: 'Documents/a.txt', permanent: true }) !== signature('delete_path', { permanent: true, path: 'Documents/a.txt' })) fail('confirmation signature depends on object key order');
+  const addonsSource = fs.readFileSync(path.join(root, 'src/main/addons.js'), 'utf8');
+  if (!addonsSource.includes('finally { clearTimeout(timeout); }')) fail('add-on call timeout timer is not cleaned up');
   const brainModule = require(path.join(root, 'src/main/brain.js'));
   const confirmSchema = brainModule.toolDefs().find((t) => t.name === 'confirm_with_user').schema;
   if (validate({ question: 'Proceed?' }, confirmSchema) === null) fail('confirmation tool accepted an unscoped approval request');
