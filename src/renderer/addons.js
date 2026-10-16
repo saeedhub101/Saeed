@@ -190,7 +190,7 @@ function qwenModelsCard() {
 function render() {
   const y = window.scrollY;
   if (tab === 'installed') {
-    root.replaceChildren(...(creating ? [packCard()] : []), ...(installed.length ? installed.map(installedCard) : [h('div', { class: 'empty' }, 'No add-ons installed yet. Open the Store tab, or install one from a file.')]));
+    root.replaceChildren(qwenModelsCard(), ...(creating ? [packCard()] : []), ...(installed.length ? installed.map(installedCard) : [h('div', { class: 'empty' }, 'No add-ons installed yet. Open the Store tab, or install one from a file.')]));
   } else {
     const shown = store ? store.filter((e) => cat === 'all' || e.category === cat) : [];
     root.replaceChildren(
