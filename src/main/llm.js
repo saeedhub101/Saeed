@@ -17,11 +17,15 @@ function parseToolArguments(raw) {
   return value;
 }
 const maxSteps = (s) => (s.agent && s.agent.maxSteps) || 25;
-const requestOptions = (settings, provider, model) => (
-  provider === 'openai' && /^gpt-(?:5|6)(?:[.-]|$)/i.test(String(model || ''))
-    ? { reasoning_effort: ['low', 'medium', 'high'].includes(settings.llm.reasoningEffort) ? settings.llm.reasoningEffort : 'high' }
-    : {}
-);
+const requestOptions = (settings, provider, model) => {
+  const id = String(model || '');
+  if (provider !== 'openai' || !/^gpt-(?:5|6)(?:[.-]|$)/i.test(id)) return {};
+  const allowed = /^gpt-6(?:[.-]|$)/i.test(id)
+    ? ['low', 'medium', 'high', 'xhigh', 'max']
+    : ['low', 'medium', 'high', 'xhigh'];
+  const effort = settings.llm.reasoningEffort;
+  return { reasoning_effort: allowed.includes(effort) ? effort : 'high' };
+};
 
 async function check(r, label) {
   if (r.ok) return r;
