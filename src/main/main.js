@@ -2,6 +2,8 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, nativeImage, screen, session, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { Readable, Transform } = require('stream');
+const { pipeline: streamPipeline } = require('stream/promises');
 const { DEFAULT_SETTINGS, merge } = require('./settings');
 const secrets = require('./secrets');
 const providers = require('./providers');
@@ -377,6 +379,45 @@ ipcMain.handle('addons:toggle', (_e, id, on) => { setSetting((s) => { s.addons.e
 ipcMain.handle('addons:remove', (_e, id) => { addons.remove(id); return true; });
 ipcMain.handle('addons:stop', (_e, id) => { addons.stop(id); return true; });
 ipcMain.handle('addons:save-settings', (_e, id, values) => { setSetting((s) => { s.addons.settings[id] = values; }); return true; });
+ipcMain.handle('addons:download-model', async (_e, choice) => {
+  const models = {
+    'qwen3-0.6b': { file: 'Qwen3-0.6B-Q4_0.gguf', url: 'https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_0.gguf' },
+    'qwen3-4b': { file: 'Qwen3-4B-Q4_K_M.gguf', url: 'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf' },
+  };
+  const model = models[String(choice)];
+  if (!model) return { ok: false, error: 'Choose a supported model first.' };
+  const dir = path.join(app.getPath('userData'), 'addon-data', 'llm-llamacpp', 'models');
+  await fs.promises.mkdir(dir, { recursive: true });
+  const target = path.join(dir, model.file);
+  if (fs.existsSync(target) && fs.statSync(target).size > 0) {
+    setSetting((s) => { s.addons.settings['llm-llamacpp'] = { ...(s.addons.settings['llm-llamacpp'] || {}), modelChoice: choice, modelPath: target, modelUrl: '' }; });
+    return { ok: true, path: target, alreadyPresent: true };
+  }
+  const tmp = target + '.part';
+  try {
+    const res = await fetch(model.url, { redirect: 'follow' });
+    if (!res.ok || !res.body) throw new Error('Model download failed: HTTP ' + res.status);
+    const total = Number(res.headers.get('content-length')) || 0;
+    let transferred = 0, last = 0;
+    const progress = new Transform({ transform(chunk, _enc, cb) {
+      transferred += chunk.length;
+      if (Date.now() - last > 500) {
+        last = Date.now();
+        sendTo('addons', 'addons:progress', { id: 'local-brain-model', transferred, total, bps: 0, eta: 0 });
+      }
+      cb(null, chunk);
+    }});
+    await streamPipeline(Readable.fromWeb(res.body), progress, fs.createWriteStream(tmp));
+    if (!fs.existsSync(tmp) || fs.statSync(tmp).size < 1024 * 1024) throw new Error('Downloaded model file is incomplete.');
+    await fs.promises.rename(tmp, target);
+    setSetting((s) => { s.addons.settings['llm-llamacpp'] = { ...(s.addons.settings['llm-llamacpp'] || {}), modelChoice: choice, modelPath: target, modelUrl: '' }; });
+    sendTo('addons', 'addons:progress', { id: 'local-brain-model', transferred: fs.statSync(target).size, total: fs.statSync(target).size, bps: 0, eta: 0 });
+    return { ok: true, path: target };
+  } catch (e) {
+    try { await fs.promises.rm(tmp, { force: true }); } catch {}
+    return { ok: false, error: e.message };
+  }
+});
 ipcMain.handle('addons:registry', async () => { try { const r = await addons.registry(); return { ok: true, list: r.list, errors: r.errors }; } catch (e) { return { ok: false, error: e.message }; } });
 ipcMain.handle('addons:set-sources', (_e, list) => { setSetting((s) => { s.addons.sources = (list || []).filter((x) => x && /^https?:\/\//i.test(String(x.url || '').trim())).map((x) => ({ name: String(x.name || '').slice(0, 40), url: String(x.url).trim() })); }); return true; });
 ipcMain.handle('addons:install-url', async (_e, url) => {
