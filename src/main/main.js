@@ -169,7 +169,7 @@ const SIZES = {
   chat: { width: 460, height: 660, title: 'Chat with Saeed' },
   addons: { width: 920, height: 720, title: 'Saeed add-ons' },
   permissions: { width: 980, height: 820, title: 'Saeed permissions' },
-  update: { width: 430, height: 270, title: 'Saeed update', resizable: false, minimizable: false, maximizable: false, alwaysOnTop: true },
+  update: { width: 560, height: 360, minWidth: 500, minHeight: 300, title: 'Saeed update', resizable: true, minimizable: false, maximizable: false, alwaysOnTop: true },
 };
 function openWin(kind) {
   if (!SIZES[kind]) return;
