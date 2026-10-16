@@ -11,7 +11,7 @@ const DEFAULT_SETTINGS = {
   llm: {
     provider: 'openai',                // anthropic | openai | custom
     maxTurns: 12,
-    reasoningEffort: 'high',          // low | medium | high; used by supported OpenAI reasoning models
+    reasoningEffort: 'max',           // low | medium | high | xhigh | max; maximize GPT-6 reasoning
     systemPrompt: '',
     anthropic: { model: 'claude-sonnet-5' },
     openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
