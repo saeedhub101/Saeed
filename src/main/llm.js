@@ -12,6 +12,11 @@ const oContent = (m) => (m.images && m.images.length
 const rText = (r) => (typeof r === 'string' ? r : String((r && r.text) || ''));
 const rImage = (r) => (r && typeof r === 'object' && r.image ? r.image : null);
 const maxSteps = (s) => (s.agent && s.agent.maxSteps) || 25;
+const requestOptions = (settings, provider, model) => (
+  provider === 'openai' && /^gpt-5(?:\\.|$)/i.test(String(model || ''))
+    ? { reasoning_effort: ['low', 'medium', 'high'].includes(settings.llm.reasoningEffort) ? settings.llm.reasoningEffort : 'high' }
+    : {}
+);
 
 async function check(r, label) {
   if (r.ok) return r;
@@ -164,15 +169,22 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
   let all = '';
   const runTool = createToolRunner(execTool, signal);
   for (let i = 0; i < maxSteps(s); i++) {
-    const m = await openaiCall(p, key, { model: p.model, messages: msgs, tools: toolDefs, tool_choice: 'auto' }, signal, onText);
+    const m = await openaiCall(p, key, { model: p.model, ...requestOptions(s, name, p.model), messages: msgs, tools: toolDefs, tool_choice: 'auto' }, signal, onText);
     msgs.push({ ...m, content: m.content || null });
     if (m.content) all += (all ? ' ' : '') + m.content;
     if (!m.tool_calls || !m.tool_calls.length) return String(m.content || '').trim() || all.trim();
     const images = [];
     for (const tc of m.tool_calls) {
-      let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* invalid JSON is surfaced to the model */ }
-      let r;
-      r = await runTool(tc.function.name, args);
+      let args;
+      try {
+        args = JSON.parse(tc.function.arguments || '{}');
+        if (!args || typeof args !== 'object' || Array.isArray(args)) throw new Error('Tool arguments must be a JSON object.');
+      } catch {
+        // Never execute a tool with empty or fabricated arguments after a model JSON error.
+        msgs.push({ role: 'tool', tool_call_id: tc.id, content: 'Tool was not executed because the model returned invalid JSON arguments. Retry with valid JSON matching the tool schema.' });
+        continue;
+      }
+      const r = await runTool(tc.function.name, args);
       msgs.push({ role: 'tool', tool_call_id: tc.id, content: rText(r) || 'Tool returned no content. Verify the state before assuming success.' });
       const img = rImage(r);
       if (img) images.push({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.data}` } });
@@ -183,7 +195,7 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
   const finalMessages = msgs.slice();
   if (finalMessages[0] && finalMessages[0].role === 'system') finalMessages[0] = { ...finalMessages[0], content: finalSystem };
   else finalMessages.unshift({ role: 'system', content: finalSystem });
-  const final = await openaiCall(p, key, { model: p.model, messages: finalMessages, tools: [], tool_choice: 'none' }, signal, onText);
+  const final = await openaiCall(p, key, { model: p.model, ...requestOptions(s, name, p.model), messages: finalMessages, tools: [], tool_choice: 'none' }, signal, onText);
   return String(final.content || '').trim() || 'I could not produce a verified final summary.';
 }
 
