@@ -52,6 +52,39 @@ const CORE_TOOLS = [
 ];
 const toolDefs = () => [...CORE_TOOLS, ...core.defs(), ...addons.toolDefs()];
 
+// Validate model-generated arguments at the execution boundary, regardless of provider.
+// Provider schemas help the model; this check protects the actual tool dispatcher.
+function validateToolArgs(value, schema, at = 'args') {
+  if (!schema || typeof schema !== 'object') return null;
+  const type = schema.type;
+  if (type === 'object') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return at + ' must be an object';
+    for (const key of schema.required || []) if (!Object.prototype.hasOwnProperty.call(value, key)) return at + '.' + key + ' is required';
+    for (const [key, item] of Object.entries(value)) {
+      if (schema.properties && schema.properties[key]) {
+        const issue = validateToolArgs(item, schema.properties[key], at + '.' + key);
+        if (issue) return issue;
+      } else if (schema.additionalProperties === false) return at + '.' + key + ' is not allowed';
+    }
+  } else if (type === 'string' && typeof value !== 'string') return at + ' must be a string';
+  else if (type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) return at + ' must be a number';
+  else if (type === 'integer' && !Number.isInteger(value)) return at + ' must be an integer';
+  else if (type === 'boolean' && typeof value !== 'boolean') return at + ' must be a boolean';
+  else if (type === 'array') {
+    if (!Array.isArray(value)) return at + ' must be an array';
+    if (schema.items) for (let i = 0; i < value.length; i++) {
+      const issue = validateToolArgs(value[i], schema.items, at + '[' + i + ']');
+      if (issue) return issue;
+    }
+  }
+  if (schema.enum && !schema.enum.some((v) => v === value)) return at + ' must be one of the allowed values';
+  if (typeof value === 'string' && schema.minLength != null && value.length < schema.minLength) return at + ' is too short';
+  if (typeof value === 'string' && schema.maxLength != null && value.length > schema.maxLength) return at + ' is too long';
+  if (typeof value === 'number' && schema.minimum != null && value < schema.minimum) return at + ' is below the minimum';
+  if (typeof value === 'number' && schema.maximum != null && value > schema.maximum) return at + ' is above the maximum';
+  return null;
+}
+
 async function execTool(settings, name, args, { onIntent, onTool, signal, trace } = {}) {
   if (onTool) onTool({ name, args });
   if (trace) traceCall(trace, name, args);
@@ -157,9 +190,14 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
   const system = DEFAULT_PROMPT + (customPrompt ? `\n\nAdditional user instructions (apply when compatible with the core rules):\n${customPrompt}` : '') + procedureText(settings, text) + (settings.memory && settings.memory.enabled ? memory.promptText() : '') + skills.promptText(text) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
   const trace = []; let calledLearn = false;
   try {
+    const availableTools = toolDefs();
     const reply = await llm.runAgent(settings, {
-      system, history: recent, tools: toolDefs(), signal, onText,
+      system, history: recent, tools: availableTools, signal, onText,
       execTool: (name, args) => {
+        const def = availableTools.find((tool) => tool.name === name);
+        if (!def) return 'Tool call rejected: "' + String(name) + '" is not available.';
+        const issue = validateToolArgs(args || {}, def.schema);
+        if (issue) return 'Tool call rejected because its arguments are invalid: ' + issue + '. Correct the arguments and try again.';
         if (name === 'learn_skill' || name === 'update_skill') calledLearn = true;
         return execTool(settings, name, args, { onIntent, onTool, signal, trace });
       },
@@ -183,4 +221,4 @@ const history = () => load().slice(-100);
 function clear() { hist = []; save(); }
 
 const defaultPrompt = () => DEFAULT_PROMPT;
-module.exports = { ask, remember, history, clear, toolDefs, execTool, defaultPrompt };
+module.exports = { ask, remember, history, clear, toolDefs, execTool, defaultPrompt, validateToolArgs };
