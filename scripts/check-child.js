@@ -44,9 +44,9 @@ if (!bad) console.log('  ok   add-on manifests');
 try {
   const agentSource = fs.readFileSync(path.join(root, 'src/main/llm.js'), 'utf8');
   const providers = [
-    ['Anthropic', /const final = await anthropicCall[\\s\\S]*?tools: \\[\\]/],
-    ['OpenAI-compatible', /const final = await openaiCall[\\s\\S]*?tools: \\[\\]/],
-    ['local add-on', /const final = await addons\\.callProvider[\\s\\S]*?tools: \\[\\]/],
+    ['Anthropic', /const final = await anthropicCall[\s\S]*?tools: \\[\\]/],
+    ['OpenAI-compatible', /const final = await openaiCall[\s\S]*?tools: \\[\\]/],
+    ['local add-on', /const final = await addons\.callProvider[\s\S]*?tools: \\[\\]/],
   ];
   for (const [name, pattern] of providers) if (!pattern.test(agentSource)) fail(name + ' agent has no final synthesis call after the tool-step limit');
   if (!agentSource.includes('function createToolRunner')) fail('agent does not guard against repeated failed tool calls');
