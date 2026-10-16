@@ -43,6 +43,7 @@ function loadCfg() {
   if (cfg.settings.llm.anthropic.model === 'claude-sonnet-5-5') cfg.settings.llm.anthropic.model = 'claude-sonnet-5';
   if (cfg.settings.llm.openai.model === 'gpt-4o-mini') cfg.settings.llm.openai.model = 'gpt-5.1';
   if (!['low', 'medium', 'high'].includes(cfg.settings.llm.reasoningEffort)) cfg.settings.llm.reasoningEffort = 'high';
+  if (!String(cfg.settings.updates.repo || '').trim()) cfg.settings.updates.repo = 'saeedhub101/Saeed';
   if (String(cfg.settings.stt.provider) === 'local') cfg.settings.stt.provider = 'openai';   // moved to the Whisper add-on
   // Old "allowed folders" become allow rules in Permissions.
   const ag = cfg.settings.agent || {};
