@@ -1,12 +1,43 @@
 {
-  "id": "llm-llamacpp", "name": "Local brain (Qwen / Llama / any GGUF)", "version": "1.0.0", "author": "Saeed", "category": "brain", "bundle": "none",
+  "id": "llm-llamacpp",
+  "name": "Local brain (Qwen / Llama / any GGUF)",
+  "version": "1.0.0",
+  "author": "Saeed",
+  "category": "brain",
+  "bundle": "auto",
   "description": "A language model that runs on this PC with no internet and no API cost (Qwen, Llama, Gemma... any GGUF file). Private and quick for chat; small models use tools less well than Claude. Experimental. It loads when you talk and is released when idle.",
-  "main": "index.js", "permissions": [], "idleSeconds": 120,
-  "provides": { "llm": { "label": "Local model" } },
+  "main": "index.js",
+  "permissions": [],
+  "idleSeconds": 120,
+  "provides": {
+    "llm": {
+      "label": "Local model"
+    }
+  },
   "settings": [
-    { "key": "modelUrl", "label": "Download the model from (GGUF link)", "type": "text", "default": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf" },
-    { "key": "modelPath", "label": "Or use a model file already on this PC", "type": "text", "default": "" },
-    { "key": "contextSize", "label": "Memory of the conversation (tokens)", "type": "number", "default": 4096 },
-    { "key": "maxTokens", "label": "Longest answer (tokens)", "type": "number", "default": 600 }
+    {
+      "key": "modelUrl",
+      "label": "Download the model from (GGUF link)",
+      "type": "text",
+      "default": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf"
+    },
+    {
+      "key": "modelPath",
+      "label": "Or use a model file already on this PC",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "key": "contextSize",
+      "label": "Memory of the conversation (tokens)",
+      "type": "number",
+      "default": 4096
+    },
+    {
+      "key": "maxTokens",
+      "label": "Longest answer (tokens)",
+      "type": "number",
+      "default": 600
+    }
   ]
 }
