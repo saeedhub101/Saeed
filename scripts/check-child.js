@@ -111,6 +111,25 @@ try {
   if (selected.some((x) => x.includes('Excel reports'))) fail('memory retrieval included an unrelated fact ahead of relevant context');
 } catch (e) { fail('memory retrieval checks could not run: ' + e.message); }
 
+/* 2g. conversation recall recovers relevant older exchanges without treating them as active instructions. */
+try {
+  const recall = require(path.join(root, 'src/main/brain.js'))._test;
+  const history = [
+    { role: 'user', text: 'نريد تطوير سعيد على main فقط', t: 1 },
+    { role: 'assistant', text: 'سأحافظ على فرع main وأطور العقل الحقيقي', t: 2 },
+    { role: 'user', text: 'أنشئ تقرير ضريبة Excel سنوي', t: 3 },
+    { role: 'assistant', text: 'سأحسب الضريبة الشهرية والسنوية في Excel', t: 4 },
+    { role: 'user', text: 'افتح المتصفح', t: 5 },
+    { role: 'assistant', text: 'تم فتح المتصفح', t: 6 },
+  ];
+  const ranked = recall.rankHistoryPairs(history, 'واصل تطوير سعيد على main', 2);
+  if (!ranked.length || !ranked[0].userText.includes('تطوير سعيد')) fail('conversation recall missed a relevant older Arabic project exchange');
+  if (ranked.some((x) => x.userText.includes('تقرير ضريبة'))) fail('conversation recall selected an unrelated older task');
+  const context = recall.historyContext(history, 'واصل تطوير سعيد على main', 2);
+  if (!context.includes('historical context only') || !context.includes('تطوير سعيد')) fail('recalled context is missing relevance or historical-only boundaries');
+  if (recall.historyContext(history, 'xyz qqq zzz', 2) !== '') fail('conversation recall injected unrelated history when no match existed');
+} catch (e) { fail('conversation recall checks could not run: ' + e.message); }
+
 /* 2f. Arabic error results are treated as failures rather than successful tool evidence. */
 try {
   const brainSource = fs.readFileSync(path.join(root, 'src/main/brain.js'), 'utf8');
