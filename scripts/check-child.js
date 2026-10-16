@@ -51,6 +51,8 @@ try {
     ['plain JSON', '{"tool_call":{"name":"open_item","args":{"name":"Excel"}}}', 'open_item'],
     ['fenced JSON', '```json' + String.fromCharCode(10) + '{"tool_call":{"name":"open_item","args":{"name":"Excel"}}}' + String.fromCharCode(10) + '```', 'open_item'],
     ['JSON in explanation', 'سأفتح البرنامج الآن. {"tool_call":{"name":"open_item","args":{"name":"Excel"}}}', 'open_item'],
+    ['stringified arguments', JSON.stringify({ function_call: { name: 'open_item', arguments: JSON.stringify({ name: 'Excel' }) } }), 'open_item'],
+    ['OpenAI-style tool_calls', JSON.stringify({ tool_calls: [{ function: { name: 'open_item', arguments: JSON.stringify({ name: 'Excel' }) } }] }), 'open_item'],
     ['tool-call tag', '<tool_call>{"name":"open_item","arguments":{"name":"Excel"}}</tool_call>', 'open_item'],
   ];
   for (const [label, input, expected] of cases) {
