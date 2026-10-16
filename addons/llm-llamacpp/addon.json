@@ -5,7 +5,7 @@
   "author": "Saeed",
   "category": "brain",
   "bundle": "none",
-  "description": "Optional local AI brain (Qwen / Llama / GGUF). Downloaded separately from Saeed and loaded only when selected. Runs on this PC without cloud API fees; the selected model downloads on first use and is stored outside the app installation.",
+  "description": "Optional local AI brain. The runtime add-on and model weights are separate. Model weights are never downloaded automatically; open Add-ons and explicitly download a supported model only if you want local AI.",
   "main": "index.js",
   "permissions": [],
   "idleSeconds": 120,
@@ -19,7 +19,7 @@
       "key": "modelChoice",
       "label": "Choose local model",
       "type": "select",
-      "default": "qwen3-4b",
+      "default": "qwen3-0.6b",
       "options": [
         [
           "qwen3-0.6b",
