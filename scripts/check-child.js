@@ -80,4 +80,18 @@ try {
   if (!bad) console.log('  ok   local brain tool-call parsing and schema validation');
 } catch (e) { fail('local brain tool-call tests could not run: ' + e.message); }
 
-process.exit(bad ? 1 : 0);
+(async () => {
+  try {
+    const brain = require(path.join(root, 'src/main/brain.js'));
+    const deletion = await brain.execTool({}, 'delete_path', { path: 'Documents/should-not-be-deleted.txt' });
+    if (!String(deletion).startsWith('Action paused: explicit confirmation is required')) fail('shared executor allowed deletion without confirmation');
+    const mismatched = await brain.execTool({}, 'delete_path', { path: 'Documents/should-not-be-deleted.txt' }, {
+      policy: { confirmedAction: brain.confirmationSignature('delete_path', { path: 'Documents/a-different-file.txt' }) },
+    });
+    if (!String(mismatched).startsWith('Action paused: explicit confirmation is required')) fail('shared executor accepted confirmation for a different target');
+    const externalWrite = await brain.execTool({}, 'http_request', { method: 'POST', url: 'https://example.com', body: {} });
+    if (!String(externalWrite).startsWith('Action paused: explicit confirmation is required')) fail('shared executor allowed an external write without confirmation');
+    if (!bad) console.log('  ok   shared executor blocks unconfirmed or mismatched high-impact actions');
+  } catch (e) { fail('shared executor policy tests could not run: ' + e.message); }
+  process.exit(bad ? 1 : 0);
+})();
