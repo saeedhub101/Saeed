@@ -297,7 +297,6 @@ try {
     if (actions.isGreeting('hello, please create a spreadsheet')) fail('greeting matcher swallowed a real task request');
     const pipelineSource = fs.readFileSync(path.join(root, 'src/main/pipeline.js'), 'utf8');
     if (!pipelineSource.includes('s.commands.local || actions.isGreeting(text)')) fail('greetings still depend on the optional local-commands setting');
-    const defaults = require(path.join(root, 'src/main/settings.js')).DEFAULT_SETTINGS;
     const whisperManifest = JSON.parse(fs.readFileSync(path.join(root, 'addons/whisper-local/addon.json'), 'utf8'));
     if (defaults.stt.provider !== 'addon:whisper-local') fail('new installs do not default to offline speech recognition');
     if (defaults.addons.enabled['whisper-local'] !== true) fail('local speech recognition is not enabled by default');
