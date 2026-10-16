@@ -93,6 +93,13 @@ const POSTURES = [
 async function route(text, settings) {
   const ar = isArabic(text);
   const t = norm(text);
+  // Basic social greetings must work without starting the paid/cloud brain.
+  // Keep this exact-match only so normal conversation still goes to the selected LLM.
+  const greetings = /^(?:hello|hi|hey|hiya|hello there|hey there|good morning|good afternoon|good evening|how are you|how are you doing|whats up|what's up|سلام|مرحبا|اهلا|اهلين|السلام عليكم|وعليكم السلام|صباح الخير|مساء الخير|كيف حالك|كيفك|شلونك)$/;
+  if (greetings.test(t)) {
+    if (ar) return { reply: /^(?:السلام عليكم|سلام)$/.test(t) ? 'وعليكم السلام! أنا جاهز لمساعدتك. ماذا تريد أن نفعل؟' : 'أهلاً! أنا جاهز لمساعدتك. ماذا تريد أن نفعل؟', intent: 'greet' };
+    return { reply: 'Hello! I am here and ready to help. What would you like to do?', intent: 'greet' };
+  }
   if (TIME_RE.test(t)) return { reply: timeText(ar) };
   if (t.length < 30) for (const [intent, re] of POSTURES) if (re.test(t)) return { reply: ar ? 'حاضر.' : 'Okay.', intent };
   const m = OPEN_RE.exec(t);
