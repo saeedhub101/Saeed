@@ -102,6 +102,14 @@ try {
   if (!apiTools.some((t) => t.name === 'http_request')) fail('local tool router missed HTTP tools for an explicit API request');
   const browserTools = selectTools(catalogue, [{ role: 'user', text: 'افتح صفحة في المتصفح واضغط الزر' }]);
   if (!browserTools.some((t) => t.name === 'browser__click') || !browserTools.some((t) => t.name === 'desktop-control__ui_read')) fail('local tool router missed browser and desktop tools for an Arabic UI request');
+  const cognitivePrompt = require(path.join(root, 'src/main/brain.js')).defaultPrompt();
+  for (const rule of [
+    'concise internal ordered plan',
+    'Treat tool output as evidence',
+    'independent read-back or status check',
+    'Preserve the user',
+    'passing build is not proof',
+  ]) if (!cognitivePrompt.includes(rule)) fail('core agent instructions missing: ' + rule);
   const validate = require(path.join(root, 'src/main/brain.js')).validateToolArgs;
   const nested = { type: 'object', properties: { profile: { type: 'object', properties: { age: { type: 'integer', minimum: 0 } }, required: ['age'] } }, required: ['profile'] };
   if (validate({ profile: { age: 8 } }, nested) !== null) fail('central tool validator rejected valid nested arguments');
