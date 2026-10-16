@@ -6,7 +6,17 @@ const path = require('path');
 
 const file = (n) => path.join(app.getPath('userData'), n);
 const readJson = (n, d) => { try { return JSON.parse(fs.readFileSync(file(n), 'utf8')); } catch { return d; } };
-const writeJson = (n, v) => fs.writeFile(file(n), JSON.stringify(v, null, 1), () => {});
+const writeJson = (n, v) => {
+  const target = file(n), tmp = target + '.tmp';
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(v, null, 1), 'utf8');
+    fs.renameSync(tmp, target);
+  } catch (error) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* cleanup is best effort */ }
+    throw error;
+  }
+};
 
 /* ---------- facts ---------- */
 let facts = null;
@@ -20,12 +30,13 @@ const addFact = (text) => {
 };
 const forgetFact = (text) => {
   const q = String(text || '').trim().toLowerCase();
+  if (!q) return 'Specify what to forget; no memory was changed.';
   const f = loadFacts(), keep = f.filter((x) => !x.text.toLowerCase().includes(q));
   facts = keep; writeJson('memory.json', keep);
   return `Forgot ${f.length - keep.length} item(s).`;
 };
 const listFacts = () => loadFacts().map((x) => x.text);
-const removeFactAt = (i) => { const f = loadFacts(); f.splice(i, 1); writeJson('memory.json', f); };
+const removeFactAt = (i) => { const f = loadFacts(), index = Number(i); if (!Number.isInteger(index) || index < 0 || index >= f.length) return false; f.splice(index, 1); writeJson('memory.json', f); return true; };
 const promptText = (limit = 40) => { const f = loadFacts().slice(-limit); return f.length ? '\nThings you know about the user and their world (use them naturally, never recite them):\n- ' + f.map((x) => x.text).join('\n- ') : ''; };
 
 /* ---------- reminders ---------- */
