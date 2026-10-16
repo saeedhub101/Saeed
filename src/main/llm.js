@@ -273,4 +273,4 @@ async function addonAgent(s, { system, history, tools, execTool, signal, onText 
 }
 
 const runAgent = (s, opts) => (s.llm.provider.startsWith('addon:') ? addonAgent(s, opts) : s.llm.provider === 'anthropic' ? anthropicAgent(s, opts) : openaiAgent(s, opts));
-module.exports = { runAgent, _test: { createToolRunner, parseToolArguments, requestOptions, shouldAutoSearch } };
+module.exports = { runAgent, _test: { createToolRunner, parseToolArguments, requestOptions, shouldAutoSearch, addonAgent } };
