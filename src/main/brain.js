@@ -146,8 +146,9 @@ function keywordsFrom(text) {
   return [...new Set(actions.norm(text).split(' ').filter((w) => w.length > 2 && !stop.has(w)))].slice(0, 8).join(', ');
 }
 // Called after a turn finishes. Saves what was done automatically, unless the model already saved or corrected a skill itself this turn.
-function autoCapture(text, trace, calledLearn) {
+function autoCapture(text, trace, calledLearn, reply) {
   if (calledLearn || trace.length < 2) return;
+  if (/\b(?:could not|couldn't|unable to|failed|failure|denied|not completed)\b|لم أتمكن|لم أستطع|فشل|لم ينجح|رفض المستخدم/i.test(String(reply || ''))) return;
   const actionSteps = trace.filter((c) => ACTION_TOOLS.has(c.name) && c.ok === true);
   if (!actionSteps.length) return; // Failed actions are never taught as reusable skills.
   const lastActionIndex = Math.max(...actionSteps.map((c) => trace.indexOf(c)));
@@ -214,8 +215,10 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
         try {
           const result = await execTool(settings, name, args, { onIntent, onTool, signal, trace });
           const summary = resultText(result);
-          const failed = /^(?:error|denied|failed|could not|couldn't|unknown tool|tool call rejected)\b/i.test(summary)
-            || /\b(?:destination already exists|no file with that name|not found|does not exist|permission denied|could not|cannot|failed|invalid|rejected)\b/i.test(summary)
+          const explicitFailure = result && typeof result === 'object'
+            && (result.ok === false || result.success === false || Boolean(result.error));
+          const failed = explicitFailure
+            || /\b(?:error|denied|failed|failure|could not|couldn't|unknown tool|tool call rejected|destination already exists|no file with that name|not found|does not exist|permission denied|cannot|invalid|rejected)\b/i.test(summary)
             || /the user said no|\bHTTP [45]\d\d\b/i.test(summary);
           markResult(result, !failed);
           return result;
@@ -226,7 +229,7 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
       },
     });
     h.push({ role: 'assistant', text: reply, t: Date.now() }); save();
-    autoCapture(text, trace, calledLearn);
+    autoCapture(text, trace, calledLearn, reply);
     return { text: reply };
   } catch (e) {
     if (h[h.length - 1] === mine) h.pop();
