@@ -1,36 +1,309 @@
 {
-  "id": "browser", "name": "Web browser", "version": "1.0.0", "author": "Saeed", "category": "web", "bundle": "auto",
+  "id": "browser",
+  "name": "Web browser",
+  "version": "1.0.0",
+  "author": "Saeed",
+  "category": "web",
+  "bundle": "auto",
   "description": "Lets Saeed use a real browser (your installed Edge or Chrome): open pages, log in, fill forms, click and read what is on the page. It can run hidden in the background or visible so you can help (CAPTCHA, SMS codes). Logins are kept in its own profile. Some sites block automation or require a human step.",
-  "main": "index.js", "permissions": ["browser.control"], "idleSeconds": 180,
+  "main": "index.js",
+  "permissions": [
+    "browser.control"
+  ],
+  "idleSeconds": 180,
   "tools": [
-    { "name": "open", "risk": "system", "perm": ["browser.control"], "description": "Open a web page in the browser and return what is on it (numbered buttons, links and fields). visible:true shows the window (use it for logins, sign-ups and when the user may need to help); visible:false keeps it hidden.",
-      "schema": { "type": "object", "properties": { "url": { "type": "string" }, "visible": { "type": "boolean" } }, "required": ["url"] } },
-    { "name": "snapshot", "risk": "system", "perm": ["browser.control"], "description": "Read the current page: title, address, numbered interactive elements [id] and the visible text.",
-      "schema": { "type": "object", "properties": { "maxChars": { "type": "number" } } } },
-    { "name": "click", "risk": "system", "perm": ["browser.control"], "description": "Click the element with this [id] from the last snapshot. Returns the new page state.",
-      "schema": { "type": "object", "properties": { "id": { "type": "number" } }, "required": ["id"] } },
-    { "name": "type", "risk": "system", "perm": ["browser.control"], "description": "Type into the field with this [id]. Put secrets as {{secret:NAME}} so you never see them. submit:true presses Enter afterwards.",
-      "schema": { "type": "object", "properties": { "id": { "type": "number" }, "text": { "type": "string" }, "submit": { "type": "boolean" }, "append": { "type": "boolean" } }, "required": ["id", "text"] } },
-    { "name": "select", "risk": "system", "perm": ["browser.control"], "description": "Choose an option (by visible label or value) in a drop-down with this [id].",
-      "schema": { "type": "object", "properties": { "id": { "type": "number" }, "option": { "type": "string" } }, "required": ["id", "option"] } },
-    { "name": "press", "risk": "system", "perm": ["browser.control"], "description": "Press a key (Enter, Tab, Escape, ArrowDown, Control+A...).",
-      "schema": { "type": "object", "properties": { "key": { "type": "string" } }, "required": ["key"] } },
-    { "name": "scroll", "risk": "system", "perm": ["browser.control"], "description": "Scroll the page (positive = down, in screens).",
-      "schema": { "type": "object", "properties": { "amount": { "type": "number" } } } },
-    { "name": "goto", "risk": "system", "perm": ["browser.control"], "description": "Go to an address, or back in history with url:'back'.",
-      "schema": { "type": "object", "properties": { "url": { "type": "string" } }, "required": ["url"] } },
-    { "name": "wait", "risk": "system", "perm": ["browser.control"], "description": "Wait for milliseconds, or until some text appears on the page.",
-      "schema": { "type": "object", "properties": { "ms": { "type": "number" }, "text": { "type": "string" } } } },
-    { "name": "screenshot", "risk": "system", "perm": ["browser.control"], "description": "Take a screenshot of the page to look at it.",
-      "schema": { "type": "object", "properties": { "fullPage": { "type": "boolean" } } } },
-    { "name": "extract", "risk": "system", "perm": ["browser.control"], "description": "Get the text of the page or of a CSS selector (tables, lists).",
-      "schema": { "type": "object", "properties": { "selector": { "type": "string" }, "maxChars": { "type": "number" } } } },
-    { "name": "tabs", "risk": "system", "perm": ["browser.control"], "description": "List, switch, open or close tabs.",
-      "schema": { "type": "object", "properties": { "action": { "type": "string", "enum": ["list", "switch", "new", "close"] }, "index": { "type": "number" }, "url": { "type": "string" } }, "required": ["action"] } },
-    { "name": "close", "risk": "system", "perm": ["browser.control"], "description": "Close the browser (frees memory).", "schema": { "type": "object", "properties": {} } }
+    {
+      "name": "open",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Open a web page in the browser and return what is on it (numbered buttons, links and fields). visible:true shows the window (use it for logins, sign-ups and when the user may need to help); visible:false keeps it hidden.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "snapshot",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Read the current page: title, address, numbered interactive elements [id] and the visible text.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "maxChars": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "click",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Click the element with this [id] from the last snapshot. Always include its visible label copied from the snapshot; high-impact labels require explicit confirmation.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "label": {
+            "type": "string",
+            "description": "Visible label/text of the element from the last snapshot"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ]
+      }
+    },
+    {
+      "name": "type",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Type into the field with this [id]. Put secrets as {{secret:NAME}} so you never see them. submit:true presses Enter afterwards.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          },
+          "submit": {
+            "type": "boolean"
+          },
+          "append": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ]
+      }
+    },
+    {
+      "name": "select",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Choose an option (by visible label or value) in a drop-down with this [id].",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "number"
+          },
+          "option": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "option"
+        ]
+      }
+    },
+    {
+      "name": "press",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Press a key (Enter, Tab, Escape, ArrowDown, Control+A...).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ]
+      }
+    },
+    {
+      "name": "scroll",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Scroll the page (positive = down, in screens).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "amount": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "goto",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Go to an address, or back in history with url:'back'.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ]
+      }
+    },
+    {
+      "name": "wait",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Wait for milliseconds, or until some text appears on the page.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "ms": {
+            "type": "number"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "screenshot",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Take a screenshot of the page to look at it.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "fullPage": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    {
+      "name": "extract",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Get the text of the page or of a CSS selector (tables, lists).",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "selector": {
+            "type": "string"
+          },
+          "maxChars": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "name": "tabs",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "List, switch, open or close tabs.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "list",
+              "switch",
+              "new",
+              "close"
+            ]
+          },
+          "index": {
+            "type": "number"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      }
+    },
+    {
+      "name": "close",
+      "risk": "system",
+      "perm": [
+        "browser.control"
+      ],
+      "description": "Close the browser (frees memory).",
+      "schema": {
+        "type": "object",
+        "properties": {}
+      }
+    }
   ],
   "settings": [
-    { "key": "channel", "label": "Browser", "type": "select", "default": "auto", "options": [["auto", "Edge or Chrome (automatic)"], ["msedge", "Microsoft Edge"], ["chrome", "Google Chrome"]] },
-    { "key": "executablePath", "label": "Browser program (optional)", "type": "text", "default": "" }
+    {
+      "key": "channel",
+      "label": "Browser",
+      "type": "select",
+      "default": "auto",
+      "options": [
+        [
+          "auto",
+          "Edge or Chrome (automatic)"
+        ],
+        [
+          "msedge",
+          "Microsoft Edge"
+        ],
+        [
+          "chrome",
+          "Google Chrome"
+        ]
+      ]
+    },
+    {
+      "key": "executablePath",
+      "label": "Browser program (optional)",
+      "type": "text",
+      "default": ""
+    }
   ]
 }
