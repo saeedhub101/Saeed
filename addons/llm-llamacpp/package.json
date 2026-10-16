@@ -1,1 +1,8 @@
-{ "name": "saeed-addon-llm-llamacpp", "version": "1.0.0", "private": true, "dependencies": { "node-llama-cpp": "^3.0.0" } }
+{
+  "name": "saeed-addon-llm-llamacpp",
+  "version": "1.0.1",
+  "private": true,
+  "dependencies": {
+    "node-llama-cpp": "^3.22.1"
+  }
+}
