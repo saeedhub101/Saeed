@@ -109,10 +109,12 @@ function setVisible(v) {
   else {
     avatarWin.webContents.send('service', 'pause');       // stops mic and audio in the window
     avatarWin.hide();
-    pipeline.cancel();                                     // stops the brain unless the chat is open
     realtime.stop();
-    addons.stopAll();                                      // frees the memory of every add-on process
-    if (!chatOpen()) bus.avatar({ type: 'cancel' });
+    if (!chatOpen()) {
+      pipeline.cancel();                                   // no chat remains to own an active brain turn
+      addons.stopAll();                                    // release child add-ons only when no UI needs them
+      bus.avatar({ type: 'cancel' });
+    }
   }
   buildTray();
 }
