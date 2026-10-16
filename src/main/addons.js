@@ -60,8 +60,11 @@ function start(a) {
     if (m.ok) r.resolve(m.result); else r.reject(new Error(m.error));
   });
   child.on('exit', () => {
+    clearTimeout(p.timer);
     for (const [, r] of p.pending) r.reject(new Error('The add-on was stopped.'));
-    procs.delete(a.id);
+    p.pending.clear();
+    p.streams.clear();
+    if (procs.get(a.id) === p) procs.delete(a.id);
     if (ctx.onChange) ctx.onChange();
   });
   if (child.stderr) child.stderr.on('data', (d) => console.error(`[${a.id}]`, String(d).trim()));
@@ -76,8 +79,13 @@ const stopAll = () => { for (const id of [...procs.keys()]) stop(id); };
 
 function armIdle(a, p) {
   clearTimeout(p.timer);
+  if (procs.get(a.id) !== p) return;
   const secs = a.idleSeconds || ctx.getSettings().agent.addonIdleSeconds || 90;
-  p.timer = setTimeout(() => { if (p.pending.size) armIdle(a, p); else stop(a.id); }, secs * 1000);
+  p.timer = setTimeout(() => {
+    if (procs.get(a.id) !== p) return;
+    if (p.pending.size) armIdle(a, p);
+    else stop(a.id);
+  }, secs * 1000);
 }
 
 async function call(a, target, name, args, signal, onStream) {
