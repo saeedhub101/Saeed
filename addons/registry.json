@@ -1,18 +1,18 @@
 {
   "addons": [
     {
-      "id": "llm-llamacpp",
-      "name": "Local brain (Qwen / Llama)",
-      "version": "1.0.1",
-      "description": "Optional local LLM runtime. Downloaded separately; the GGUF model downloads on first use.",
-      "author": "Saeed",
-      "permissions": [],
-      "category": "brain",
       "bundle": "none",
+      "name": "Local brain (Qwen / Llama)",
+      "id": "llm-llamacpp",
+      "url": "https://github.com/saeedhub101/Saeed/releases/download/addons/llm-llamacpp-1.0.1.zip",
+      "category": "brain",
+      "sha256": "3f5417279252550d437852758e06f64d6d0a3cf218b380538aaf348742200b66",
+      "size": 394138687,
+      "description": "Optional local LLM runtime. Downloaded separately; the GGUF model downloads on first use.",
+      "permissions": [],
       "file": "llm-llamacpp-1.0.1.zip",
-      "size": 0,
-      "sha256": "",
-      "url": "https://github.com/saeedhub101/Saeed/releases/download/addons/llm-llamacpp-1.0.1.zip"
+      "version": "1.0.1",
+      "author": "Saeed"
     }
   ]
 }
