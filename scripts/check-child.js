@@ -119,6 +119,9 @@ try {
   const signature = require(path.join(root, 'src/main/brain.js')).confirmationSignature;
   if (signature('delete_path', { path: 'Documents/a.txt' }) === signature('delete_path', { path: 'Documents/b.txt' })) fail('confirmation signature did not bind approval to the exact target');
   if (signature('delete_path', { path: 'Documents/a.txt', permanent: true }) !== signature('delete_path', { permanent: true, path: 'Documents/a.txt' })) fail('confirmation signature depends on object key order');
+  const mainLifecycleSource = fs.readFileSync(path.join(root, 'src/main/main.js'), 'utf8');
+  if (!mainLifecycleSource.includes('function persistCfg()') || !mainLifecycleSource.includes("fs.renameSync(tmp, target)")) fail('configuration persistence is not atomic');
+  if (!mainLifecycleSource.includes("app.on('before-quit'") || !mainLifecycleSource.includes('persistCfg();')) fail('configuration is not flushed before application exit');
   const addonsSource = fs.readFileSync(path.join(root, 'src/main/addons.js'), 'utf8');
   if (!addonsSource.includes('finally { clearTimeout(timeout); }')) fail('add-on call timeout timer is not cleaned up');
   if (!addonsSource.includes('p.pending.clear();') || !addonsSource.includes('p.streams.clear();')) fail('exited add-on processes retain pending IPC or stream references');
