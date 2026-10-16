@@ -9,7 +9,7 @@ const addon = require(path.join(root, 'addons/llm-llamacpp/index.js'));
 const dataDir = path.join(os.tmpdir(), 'saeed-live-local-brain');
 const ctx = {
   dataDir,
-  settings: { modelChoice: 'qwen3-4b', modelUrl: '', modelPath: '', contextSize: 4096, maxTokens: 240 },
+  settings: { modelChoice: 'qwen3-4b', modelUrl: '', modelPath: process.env.SAEED_TEST_MODEL_PATH || '', contextSize: 4096, maxTokens: 240 },
   status: (s) => console.log('[model]', s),
   stream: () => {},
 };
