@@ -152,7 +152,11 @@ function openWin(kind) {
   devKeys(w);
   w.on('closed', () => {
     wins[kind] = null;
-    if (kind === 'chat' && !cfg.visible) pipeline.cancel();   // hidden + chat closed = brain stopped
+    if (kind === 'chat' && !cfg.visible) {
+      pipeline.cancel();                                     // hidden + chat closed = brain stopped
+      realtime.stop();
+      addons.stopAll();
+    }
   });
   wins[kind] = w;
 }
