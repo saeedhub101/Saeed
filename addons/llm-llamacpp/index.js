@@ -1,5 +1,6 @@
 'use strict';
 const fs = require('fs');
+const crypto = require('crypto');
 const path = require('path');
 const { Readable, Transform } = require('stream');
 const { pipeline } = require('stream/promises');
@@ -82,6 +83,7 @@ function selectLocalTools(tools, messages) {
   const defs = Array.isArray(tools) ? tools : [];
   const userText = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role === 'user').slice(-4).map((m) => String(m.text || '')).join(' ');
   const text = userText.toLowerCase().replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  const hasImages = (Array.isArray(messages) ? messages : []).some((m) => m && Array.isArray(m.images) && m.images.length > 0);
   const chosen = new Set();
   const exact = (names) => { for (const t of defs) if (names.includes(t.name)) chosen.add(t.name); };
   const prefix = (prefixes) => { for (const t of defs) if (prefixes.some((p) => t.name.startsWith(p))) chosen.add(t.name); };
@@ -104,9 +106,9 @@ function selectLocalTools(tools, messages) {
   if (browserTask) prefix(['browser__']);
   if (screenTask || browserTask) prefix(['desktop-control__']);
   if (databaseTask) prefix(['database__']);
-  if (imageTask) { prefix(['ocr__', 'desktop-control__']); exact(['view_image']); }
+  if (imageTask || hasImages) { prefix(['ocr__']); if (imageTask) prefix(['desktop-control__']); exact(['view_image']); }
   if (characterTask) prefix(['party-pack__']);
-  const specialized = fileTask || sheetTask || wordTask || pdfTask || browserTask || screenTask || databaseTask || imageTask || characterTask;
+  const specialized = fileTask || sheetTask || wordTask || pdfTask || browserTask || screenTask || databaseTask || imageTask || characterTask || hasImages;
   if (!specialized) {
     const words = [...new Set(text.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4))];
     const ranked = defs.filter((t) => t.name.includes('__')).map((t) => {
@@ -116,6 +118,39 @@ function selectLocalTools(tools, messages) {
     for (const t of ranked) chosen.add(t.name);
   }
   return defs.filter((t) => chosen.has(t.name));
+}
+function materializeImages(messages, ctx) {
+  const dir = path.join(ctx.dataDir, 'attachments');
+  fs.mkdirSync(dir, { recursive: true });
+  const refs = new Map(), active = new Set();
+  const hashFor = (image) => crypto.createHash('sha256').update(String(image.mime || '') + ';').update(String(image.data || '')).digest('hex').slice(0, 32);
+  const extFor = (mime) => ({ 'image/jpeg': '.jpg', 'image/jpg': '.jpg', 'image/png': '.png', 'image/bmp': '.bmp', 'image/webp': '.webp' }[String(mime || '').toLowerCase()] || '');
+  for (const message of (Array.isArray(messages) ? messages : [])) {
+    for (const image of (message && Array.isArray(message.images) ? message.images : [])) {
+      if (!image || typeof image.data !== 'string' || !String(image.mime || '').startsWith('image/') || image.data.length > 24 * 1024 * 1024) continue;
+      const ext = extFor(image.mime);
+      if (!ext) continue;
+      const buffer = Buffer.from(image.data, 'base64');
+      if (!buffer.length || buffer.length > 18 * 1024 * 1024) continue;
+      const hash = hashFor(image), target = path.join(dir, hash + ext);
+      if (!fs.existsSync(target) || fs.statSync(target).size !== buffer.length) fs.writeFileSync(target, buffer);
+      refs.set(hash, target); active.add(path.basename(target));
+    }
+  }
+  // Keep only attachments referenced by this active conversation; a new turn without images clears old copies.
+  for (const name of fs.readdirSync(dir)) {
+    if (/^[a-f0-9]{32}\\.(?:jpg|png|bmp|webp)$/i.test(name) && !active.has(name)) {
+      try { fs.rmSync(path.join(dir, name), { force: true }); } catch { /* cleanup is best effort */ }
+    }
+  }
+  const pathsFor = (message) => (Array.isArray(message && message.images) ? message.images : [])
+    .map((image) => refs.get(hashFor(image))).filter(Boolean);
+  const noteFor = (message, canReadImage) => {
+    const paths = pathsFor(message);
+    if (!paths.length) return '';
+    return '\\n[User attached image file(s): ' + paths.join(', ') + '. Use the listed OCR tool to read them before describing their contents. If no image-reading tool is available, say this local model cannot inspect pixels directly and ask for a description instead of guessing.]';
+  };
+  return { pathsFor, noteFor, hasImages: active.size > 0 };
 }
 function toolInstructions(tools) {
   if (!Array.isArray(tools) || !tools.length) return '';
