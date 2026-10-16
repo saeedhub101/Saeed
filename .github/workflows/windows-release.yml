@@ -1,6 +1,6 @@
 # Windows-only packaging and release workflow
-# Electron Builder creates the installer locally; the release action publishes it.
-name: Windows Build and Release
+# Main commits build and verify the installer; publishing is manual and versioned.
+name: Saeed Windows Build and Release
 
 on:
   push:
@@ -12,7 +12,6 @@ on:
         required: true
         type: string
 
-# Only the newest main build needs to finish; publishing remains a separate manual decision.
 concurrency:
   group: windows-build-${{ github.ref }}
   cancel-in-progress: true
@@ -34,7 +33,7 @@ jobs:
 
       - name: Install dependencies
         shell: pwsh
-        run: npm install
+        run: npm install --no-audit --no-fund
 
       - name: Set release version
         if: github.event_name == 'workflow_dispatch'
@@ -42,78 +41,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: |
-          if ($env:RELEASE_VERSION -notmatch '^\\d+\\.\\d+\\.\\d+
-
-      - name: Verify packaged runtime files
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "src/vendor/three/three.module.js")) {
-            Write-Error "Vendored Three.js runtime module was not generated."
-            exit 1
-          }
-          if (-not (Test-Path "src/vendor/three/addons/loaders/GLTFLoader.js")) {
-            Write-Error "Vendored Three.js GLTFLoader was not generated."
-            exit 1
-          }
-          if (-not (Test-Path "src/vendor/three/addons/exporters/GLTFExporter.js")) {
-            Write-Error "Vendored Three.js GLTFExporter was not generated."
-            exit 1
-          }
-          if (-not (Test-Path "node_modules/electron-builder")) {
-            Write-Error "electron-builder is missing from node_modules."
-            exit 1
-          }
-          $asar = "dist/win-unpacked/resources/app.asar"
-          if (-not (Test-Path $asar)) {
-            Write-Error "Packaged app.asar was not produced."
-            exit 1
-          }
-          $extract = "$env:TEMP/app-asar-extracted"
-          if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
-          npx --yes @electron/asar extract "$asar" "$extract"
-          $required = @(
-            "src/renderer/avatar.js",
-            "src/renderer/avatar.html",
-            "src/renderer/studio.js",
-            "src/renderer/studio.html",
-            "src/shared/character.js",
-            "src/vendor/three/three.module.js",
-            "src/vendor/three/addons/loaders/GLTFLoader.js",
-            "src/vendor/three/addons/exporters/GLTFExporter.js"
-          )
-          foreach ($item in $required) {
-            $path = Join-Path $extract ($item -replace '/', '\')
-            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-              Write-Error "Missing from extracted app.asar: $item"
-              exit 1
-            }
-            Write-Host "ASAR OK: $item"
-          }
-
-      - name: Verify installer
-        shell: pwsh
-        run: |
-          $files = Get-ChildItem -Path dist -File -Filter *.exe -ErrorAction SilentlyContinue
-          if (-not $files) {
-            Write-Error "No Windows .exe installer was produced."
-            exit 1
-          }
-          $files | ForEach-Object { Write-Host "FOUND: $($_.FullName) ($($_.Length) bytes)" }
-
-      - name: Create GitHub Release
-        if: github.event_name == 'workflow_dispatch'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ inputs.version }}
-          name: Saeed v${{ inputs.version }}
-          generate_release_notes: true
-          files: |
-            dist/*.exe
-            dist/*.blockmap
-            dist/latest.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-) {
+          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') {
             Write-Error "Release version must be semantic MAJOR.MINOR.PATCH, for example 0.7.1."
             exit 1
           }
@@ -169,7 +97,7 @@ jobs:
             Write-Host "ASAR OK: $item"
           }
 
-      - name: Verify installer
+      - name: Verify installer and updater metadata
         shell: pwsh
         run: |
           $files = Get-ChildItem -Path dist -File -Filter *.exe -ErrorAction SilentlyContinue
@@ -178,16 +106,21 @@ jobs:
             exit 1
           }
           $files | ForEach-Object { Write-Host "FOUND: $($_.FullName) ($($_.Length) bytes)" }
+          if (-not (Test-Path "dist/latest.yml")) {
+            Write-Error "electron-updater metadata latest.yml was not produced."
+            exit 1
+          }
 
       - name: Create GitHub Release
         if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.${{ github.run_number }}
-          name: Avatar Agent v0.1.${{ github.run_number }}
+          tag_name: v${{ inputs.version }}
+          name: Saeed v${{ inputs.version }}
           generate_release_notes: true
           files: |
             dist/*.exe
             dist/*.blockmap
+            dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
