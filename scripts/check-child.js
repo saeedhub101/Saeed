@@ -83,6 +83,9 @@ try {
   if (policy('http_request', { method: 'GET', url: 'https://example.com' })) fail('confirmation policy incorrectly blocked a read-only HTTP request');
   if (!policy('http_request', { method: 'POST', url: 'https://example.com' })) fail('confirmation policy did not protect an external write request');
   if (!policy('database__execute', { sql: 'UPDATE customers SET active = 0' })) fail('confirmation policy did not protect database writes');
+  if (!policy('browser__click', { id: 7, label: 'Submit payment' })) fail('confirmation policy did not protect a browser payment button');
+  if (policy('browser__click', { id: 7, label: 'Open menu' })) fail('confirmation policy incorrectly blocked a harmless browser click');
+  if (!policy('desktop-control__ui_click', { name: 'Delete record' })) fail('confirmation policy did not protect a destructive desktop control');
   if (policy('database__execute', { sql: 'SELECT * FROM customers' })) fail('confirmation policy incorrectly blocked a read-only database query');
   const signature = require(path.join(root, 'src/main/brain.js')).confirmationSignature;
   if (signature('delete_path', { path: 'Documents/a.txt' }) === signature('delete_path', { path: 'Documents/b.txt' })) fail('confirmation signature did not bind approval to the exact target');
