@@ -483,7 +483,7 @@ app.whenReady().then(() => {
     onChange: notifyAddons, onDesktop: desktopPing,
   });
   let silent = false;
-  updater.init({ emit: (st) => {
+  updater.init({ getSettings: () => cfg.settings, emit: (st) => {
     sendTo('update', 'update:state', st);
     if (silent && st.state === 'available') { silent = false; openWin('update'); }
     if (['none', 'error', 'dev'].includes(st.state)) silent = false;
