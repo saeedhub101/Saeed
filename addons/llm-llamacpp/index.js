@@ -132,12 +132,17 @@ function parseToolCall(text, tools) {
   for (const candidate of jsonCandidates(text)) {
     let value;
     try { value = JSON.parse(candidate); } catch { continue; }
-    const call = value && (value.tool_call || value.toolCall || value.function || value);
+    const call = value && (value.tool_call || value.toolCall || value.function_call || value.function
+      || (Array.isArray(value.tool_calls) && value.tool_calls[0] && (value.tool_calls[0].function || value.tool_calls[0])) || value);
     const name = call && (call.name || call.tool);
     if (typeof name !== 'string' || !allowed.has(name)) continue;
-    const args = call.args && typeof call.args === 'object' && !Array.isArray(call.args) ? call.args
+    let args = call.args && typeof call.args === 'object' && !Array.isArray(call.args) ? call.args
       : call.arguments && typeof call.arguments === 'object' && !Array.isArray(call.arguments) ? call.arguments
         : call.input && typeof call.input === 'object' && !Array.isArray(call.input) ? call.input : null;
+    if (!args) {
+      const encoded = typeof call.args === 'string' ? call.args : typeof call.arguments === 'string' ? call.arguments : typeof call.input === 'string' ? call.input : '';
+      try { const parsed = encoded ? JSON.parse(encoded) : null; if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) args = parsed; } catch { /* invalid arguments */ }
+    }
     if (!args) continue;
     const def = allowed.get(name);
     if (schemaError(args, def.schema)) continue;
