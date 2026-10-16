@@ -68,7 +68,7 @@ const DEFAULT_SETTINGS = {
     grants: {},                        // { addonId: { 'files.write': true } } set by "Always allow"
     dangerous: false,                  // allow deleting drive roots, the Windows folder and the user profile folder - its own switch, not part of the reset below
   },
-  updates: { repo: '', autoCheck: true },
+  updates: { repo: 'saeedhub101/Saeed', autoCheck: true },
   ui: { language: 'en' },
   addons: { registryUrl: '', sources: [], enabled: {}, settings: {}, trusted: {}, removed: [] },
   performance: { idleFps: 12 },
