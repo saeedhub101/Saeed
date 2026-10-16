@@ -138,17 +138,34 @@ module.exports = {
         const turns = messages.filter((m) => (m.role === 'user' || m.role === 'assistant' || m.role === 'tool') && m.text);
         const last = turns.pop();
         if (!last) return { text: '', toolCalls: [] };
+        const contextSize = Math.max(1024, Math.min(32768, Number(ctx.settings.contextSize) || 4096));
+        // Reserve context for system rules, the tool catalogue, the current request and the answer.
+        // Long old chats and tool output must not silently overflow a small local model's context.
+        const historyBudget = Math.max(700, Math.min(9000, Math.floor(contextSize * 0.7)));
+        const selected = [];
+        let used = 0;
+        for (let i = turns.length - 1; i >= 0; i--) {
+          const m = turns[i];
+          const limit = m.role === 'tool' ? 1200 : 900;
+          const value = String(m.text).slice(-limit);
+          if (selected.length && used + value.length > historyBudget) break;
+          selected.unshift({ ...m, text: value });
+          used += value.length;
+        }
         const history = [{ type: 'system', text: String(system || '') + toolInstructions(tools) }];
-        for (const m of turns) {
+        for (const m of selected) {
           if (m.role === 'user') history.push({ type: 'user', text: m.text });
           else if (m.role === 'assistant') history.push({ type: 'model', response: [m.text] });
           else history.push({ type: 'user', text: `Tool result (${m.name || m.toolCallId || 'tool'}):\n${m.text}` });
         }
         session.setChatHistory(history);
         const maxTokens = Math.max(64, Math.min(4096, Number(ctx.settings.maxTokens) || 600));
-        let text = String(await session.prompt(last.role === 'tool' ? `Tool result (${last.name || last.toolCallId || 'tool'}):\n${last.text}\nContinue the task using this result.` : last.text, {
-          maxTokens,
-        })).trim();
+        const currentLimit = Math.max(800, Math.min(5000, Math.floor(contextSize * 0.8)));
+        const currentText = String(last.text || '');
+        const promptText = last.role === 'tool'
+          ? `Tool result (${last.name || last.toolCallId || 'tool'}):\n${currentText.slice(-currentLimit)}\nContinue the task using this result.`
+          : currentText.slice(0, currentLimit);
+        let text = String(await session.prompt(promptText, { maxTokens })).trim();
         let toolCalls = parseToolCall(text, tools);
         // Retry once when the model clearly attempted a tool call but produced malformed JSON or arguments.
         // Do not expose raw control JSON to the user if the retry also fails.
