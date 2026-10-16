@@ -81,21 +81,21 @@ function compactTools(tools) {
 function selectLocalTools(tools, messages) {
   const defs = Array.isArray(tools) ? tools : [];
   const userText = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role === 'user').slice(-4).map((m) => String(m.text || '')).join(' ');
-  const text = userText.toLowerCase().replace(/[\\u064B-\\u065F\\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+  const text = userText.toLowerCase().replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
   const chosen = new Set();
   const exact = (names) => { for (const t of defs) if (names.includes(t.name)) chosen.add(t.name); };
   const prefix = (prefixes) => { for (const t of defs) if (prefixes.some((p) => t.name.startsWith(p))) chosen.add(t.name); };
   const base = ['confirm_with_user', 'recall_skills', 'learn_skill', 'update_skill', 'forget_skill', 'remember', 'forget', 'express', 'get_time', 'set_reminder', 'list_reminders', 'cancel_reminder', 'open_item', 'find_files', 'open_path', 'system_info', 'web_search', 'web_fetch', 'run_command'];
   exact(base);
-  const fileTask = /\\b(file|folder|path|save|write|read|copy|move|delete|rename|download|text|txt|csv|json|md|ملف|مجلد|مسار|احفظ|اكتب|اقرا|انسخ|انقل|احذف|حمل|تنزيل|تحميل)\\b/.test(text);
-  const sheetTask = /\\b(excel|spreadsheet|xlsx|workbook|worksheet|cell|cells|csv|اكسل|إكسل|خلية|خلايا|ورقة عمل|جدول بيانات)\\b/.test(text);
-  const wordTask = /\\b(word|docx|document|letter|report|وورد|مستند|خطاب|تقرير|رساله|رسالة)\\b/.test(text);
-  const pdfTask = /\\b(pdf|invoice|receipt|فاتورة|فاتوره|بي دي اف)\\b/.test(text);
-  const browserTask = /\\b(browser|website|webpage|website|site|login|sign in|web form|متصفح|موقع|صفحه|صفحة|سجل الدخول|تسجيل الدخول|موقع ويب)\\b/.test(text);
-  const screenTask = /\\b(screen|desktop|window|button|click|keyboard|mouse|program|application|ui automation|شاشه|شاشة|نافذه|نافذة|زر|اضغط|اكبس|انقر|برنامج|واجهه|واجهة)\\b/.test(text);
-  const databaseTask = /\\b(database|sql|query|record|records|table|قاعدة بيانات|استعلام|سجل|سجلات)\\b/.test(text);
-  const imageTask = /\\b(image|picture|photo|screenshot|ocr|صوره|صورة|صور|لقطه|لقطة|اقرا الصورة|قراءة الصورة)\\b/.test(text);
-  const characterTask = /\\b(character|avatar|animation|pose|emotion|face|viseme|شخصيه|شخصية|حركه|حركة|عظمه|عظمة|عظام|وجه|تعابير)\\b/.test(text);
+  const fileTask = /\b(file|folder|path|save|write|read|copy|move|delete|rename|download|text|txt|csv|json|md|ملف|مجلد|مسار|احفظ|اكتب|اقرا|انسخ|انقل|احذف|حمل|تنزيل|تحميل)\b/.test(text);
+  const sheetTask = /\b(excel|spreadsheet|xlsx|workbook|worksheet|cell|cells|csv|اكسل|إكسل|خلية|خلايا|ورقة عمل|جدول بيانات)\b/.test(text);
+  const wordTask = /\b(word|docx|document|letter|report|وورد|مستند|خطاب|تقرير|رساله|رسالة)\b/.test(text);
+  const pdfTask = /\b(pdf|invoice|receipt|فاتورة|فاتوره|بي دي اف)\b/.test(text);
+  const browserTask = /\b(browser|website|webpage|website|site|login|sign in|web form|متصفح|موقع|صفحه|صفحة|سجل الدخول|تسجيل الدخول|موقع ويب)\b/.test(text);
+  const screenTask = /\b(screen|desktop|window|button|click|keyboard|mouse|program|application|ui automation|شاشه|شاشة|نافذه|نافذة|زر|اضغط|اكبس|انقر|برنامج|واجهه|واجهة)\b/.test(text);
+  const databaseTask = /\b(database|sql|query|record|records|table|قاعدة بيانات|استعلام|سجل|سجلات)\b/.test(text);
+  const imageTask = /\b(image|picture|photo|screenshot|ocr|صوره|صورة|صور|لقطه|لقطة|اقرا الصورة|قراءة الصورة)\b/.test(text);
+  const characterTask = /\b(character|avatar|animation|pose|emotion|face|viseme|شخصيه|شخصية|حركه|حركة|عظمه|عظمة|عظام|وجه|تعابير)\b/.test(text);
   if (fileTask) exact(['list_folder', 'read_file', 'write_file', 'make_folder', 'copy_path', 'move_path', 'delete_path', 'file_info', 'download_file', 'view_image', 'http_request']);
   if (sheetTask) prefix(['excel__', 'charts__']);
   if (wordTask) prefix(['word__']);
@@ -107,7 +107,7 @@ function selectLocalTools(tools, messages) {
   if (characterTask) prefix(['party-pack__']);
   const specialized = fileTask || sheetTask || wordTask || pdfTask || browserTask || screenTask || databaseTask || imageTask || characterTask;
   if (!specialized) {
-    const words = [...new Set(text.split(/[^\\p{L}\\p{N}]+/u).filter((w) => w.length >= 4))];
+    const words = [...new Set(text.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4))];
     const ranked = defs.filter((t) => t.name.includes('__')).map((t) => {
       const hay = (t.name + ' ' + String(t.description || '').slice(0, 180)).toLowerCase();
       return { name: t.name, score: words.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0) };
