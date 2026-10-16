@@ -62,6 +62,7 @@ try {
   }
   const reasoningSettings = { llm: { reasoningEffort: 'high' } };
   if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-5.1').reasoning_effort !== 'high') fail('GPT-5 reasoning effort was not enabled');
+  if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-5-mini').reasoning_effort !== 'high') fail('GPT-5 mini reasoning effort was not enabled');
   if (Object.keys(llmTest.requestOptions(reasoningSettings, 'custom', 'gpt-5.1')).length) fail('reasoning parameters leaked to an arbitrary OpenAI-compatible provider');
   const defaults = require(path.join(root, 'src/main/settings.js')).DEFAULT_SETTINGS;
   if (defaults.llm.anthropic.model !== 'claude-sonnet-5' || defaults.llm.openai.model !== 'gpt-5.1') fail('default brain models are not current reasoning-capable choices');
