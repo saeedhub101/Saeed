@@ -35,22 +35,40 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Set release version
-        if: github.event_name == 'workflow_dispatch'
+        id: version
         shell: pwsh
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: \${{ inputs.version }}
+          EVENT_NAME: \${{ github.event_name }}
+          RUN_NUMBER: \${{ github.run_number }}
         run: |
-          if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') {
-            Write-Error "Release version must be semantic MAJOR.MINOR.PATCH, for example 0.7.1."
-            exit 1
-          }
           $currentVersion = [version]((Get-Content package.json -Raw | ConvertFrom-Json).version)
-          $requestedVersion = [version]$env:RELEASE_VERSION
-          if ($requestedVersion -le $currentVersion) {
-            Write-Error "Release version must be greater than the current package version $currentVersion."
-            exit 1
+          if ($env:EVENT_NAME -eq 'workflow_dispatch') {
+            if ($env:RELEASE_VERSION -notmatch '^\d+\.\d+\.\d+$') {
+              Write-Error "Release version must be semantic MAJOR.MINOR.PATCH, for example 0.7.1."
+              exit 1
+            }
+            git fetch --tags --force
+            $existingVersions = @(git tag --list 'v*' | ForEach-Object {
+              if ($_ -match '^v(\d+\.\d+\.\d+)$') { [version]$Matches[1] }
+            })
+            $latestVersion = $currentVersion
+            foreach ($existingVersion in $existingVersions) {
+              if ($existingVersion -gt $latestVersion) { $latestVersion = $existingVersion }
+            }
+            $requestedVersion = [version]$env:RELEASE_VERSION
+            if ($requestedVersion -le $latestVersion) {
+              Write-Error "Release version must be greater than the current/latest release version $latestVersion."
+              exit 1
+            }
+          } else {
+            $parts = $currentVersion.ToString().Split('.')
+            $patch = [Math]::Max([int]$parts[2] + 1, [int]$env:RUN_NUMBER)
+            $env:RELEASE_VERSION = "$($parts[0]).$($parts[1]).$patch"
+            Write-Host "Automatic main release version: $env:RELEASE_VERSION"
           }
           npm version $env:RELEASE_VERSION --no-git-tag-version
+          "version=$env:RELEASE_VERSION" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Build Windows installer
         shell: pwsh
@@ -176,12 +194,12 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.release_meta.outputs.tag_name }}
-          name: ${{ steps.release_meta.outputs.release_name }}
+          tag_name: v\${{ steps.version.outputs.version }}
+          name: Saeed v\${{ steps.version.outputs.version }}
           generate_release_notes: true
           files: |
-            dist/Saeed Setup *.exe
-            dist/Saeed Setup *.exe.blockmap
+            dist/Saeed Setup \${{ steps.version.outputs.version }}.exe
+            dist/Saeed Setup \${{ steps.version.outputs.version }}.exe.blockmap
             dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
