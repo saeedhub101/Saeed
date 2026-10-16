@@ -134,13 +134,17 @@ function selectLocalTools(tools, messages) {
   if (commandTask) exact(['run_command']);
   if (networkTask) exact(['http_request']);
   const specialized = fileTask || sheetTask || wordTask || pdfTask || browserTask || screenTask || databaseTask || imageTask || characterTask || commandTask || networkTask || hasImages;
-  if (!specialized) {
-    const words = [...new Set(text.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4))];
+  // Keep a small semantic fallback catalogue for mixed or poorly worded requests.
+  // Only add-on tools are eligible here; raw shell/API tools stay opt-in by explicit intent.
+  {
+    const words = [...new Set(text.split(/[^\\p{L}\\p{N}]+/u).filter((w) => w.length >= 3))];
     const ranked = defs.filter((t) => t.name.includes('__')).map((t) => {
-      const hay = (t.name + ' ' + String(t.description || '').slice(0, 180)).toLowerCase();
-      return { name: t.name, score: words.reduce((n, w) => n + (hay.includes(w) ? 1 : 0), 0) };
-    }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 6);
-    for (const t of ranked) chosen.add(t.name);
+      const hay = (t.name + ' ' + String(t.description || '').slice(0, 320)).toLowerCase()
+        .replace(/[\\u064B-\\u065F\\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
+      return { name: t.name, score: words.reduce((n, w) => n + (hay.includes(w) ? (w.length >= 5 ? 2 : 1) : 0), 0) };
+    }).filter((x) => x.score > 0).sort((x, y) => y.score - x.score || x.name.localeCompare(y.name));
+    const extraLimit = specialized ? 3 : 6;
+    for (const t of ranked.slice(0, extraLimit)) chosen.add(t.name);
   }
   return defs.filter((t) => chosen.has(t.name));
 }
