@@ -230,7 +230,7 @@ function shouldAutoSearch(text) {
   // Requests that clearly ask Saeed to operate on the user's PC should stay local.
   if (/\b(open|launch|run|create|write|save|delete|rename|move|copy|translate|summari[sz]e|calculate|draw|click|press|install)\b/i.test(normalized)
     || /افتح|شغل|نفذ|انشئ|اكتب|احفظ|احذف|اعد تسميه|انقل|انسخ|ترجم|لخص|احسب|ارسم|اضغط|انقر|ثبت|سطب/.test(normalized)) return false;
-  const currentOrResearch = /\b(current time|what time|weather|forecast|latest news|news about|price of|exchange rate|capital of|where is|where are|who is|when did|when was|how many|how much|how far|population of|located|meaning of|tell me about|information about|latest|today|right now)\b/i.test(normalized)
+  const currentOrResearch = /\b(current time|what time|what is|what are|what does|weather|forecast|latest news|news about|price of|exchange rate|capital of|where is|where are|who is|who are|when did|when was|why is|why are|why does|how does|how is|how are|how many|how much|how far|population of|located|meaning of|definition of|define|explain|tell me about|information about|latest|today|right now)\b/i.test(normalized)
     || /اين|وين|من هو|من هي|ما هو|ما هي|متى|لماذا|كيف|كم|ما معنى|معنى|اين تقع|اين يوجد|عاصمه|الطقس|درجه الحراره|كم الساعه|اخر اخبار|احدث|سعر|اسعار|عدد سكان|معلومات عن|حدثني عن/.test(normalized);
   return currentOrResearch;
 }
