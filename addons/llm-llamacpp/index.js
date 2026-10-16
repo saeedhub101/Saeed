@@ -1,31 +1,51 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const { Readable, Transform } = require('stream');
+const { pipeline } = require('stream/promises');
 
 let state = null;
 
 async function modelFile(ctx) {
-  if (ctx.settings.modelPath && fs.existsSync(ctx.settings.modelPath)) return ctx.settings.modelPath;
-  const url = ctx.settings.modelUrl;
-  if (!url) throw new Error('Set a model link or a model file in this add-on\'s settings.');
+  const configuredPath = String(ctx.settings.modelPath || '').trim();
+  if (configuredPath && fs.existsSync(configuredPath) && fs.statSync(configuredPath).isFile()) return configuredPath;
+  const url = String(ctx.settings.modelUrl || '').trim();
+  if (!url) throw new Error('Choose a model file or set a model download link in this add-on\'s settings.');
+  let filename;
+  try {
+    const parsed = new URL(url);
+    if (!['https:', 'http:'].includes(parsed.protocol)) throw new Error('Only HTTP or HTTPS model links are supported.');
+    filename = path.basename(decodeURIComponent(parsed.pathname));
+  } catch (e) { throw new Error('Invalid model download link: ' + e.message); }
+  if (!filename || filename === '.' || filename === '..' || !/\.gguf$/i.test(filename)) throw new Error('The model link must point to a .gguf file.');
   const dir = path.join(ctx.dataDir, 'models');
   fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, decodeURIComponent(url.split('?')[0].split('/').pop()));
-  if (fs.existsSync(file)) return file;
+  const file = path.join(dir, filename);
+  if (fs.existsSync(file) && fs.statSync(file).isFile() && fs.statSync(file).size > 0) return file;
   const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok) throw new Error('Model download failed: HTTP ' + res.status);
-  const total = Number(res.headers.get('content-length')) || 0, tmp = file + '.part', out = fs.createWriteStream(tmp);
-  const reader = res.body.getReader();
+  if (!res.ok || !res.body) throw new Error('Model download failed: HTTP ' + res.status);
+  const total = Number(res.headers.get('content-length')) || 0;
+  const tmp = file + '.part';
   let got = 0, last = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    out.write(value); got += value.length;
-    if (Date.now() - last > 1000) { last = Date.now(); ctx.status(`Downloading the model… ${(got / 1048576).toFixed(0)}${total ? ' of ' + (total / 1048576).toFixed(0) : ''} MB`); }
+  const progress = new Transform({
+    transform(chunk, _encoding, callback) {
+      got += chunk.length;
+      if (Date.now() - last > 1000) {
+        last = Date.now();
+        ctx.status('Downloading the model… ' + (got / 1048576).toFixed(0) + (total ? ' of ' + (total / 1048576).toFixed(0) : '') + ' MB');
+      }
+      callback(null, chunk);
+    },
+  });
+  try {
+    await pipeline(Readable.fromWeb(res.body), progress, fs.createWriteStream(tmp));
+    if (!fs.existsSync(tmp) || fs.statSync(tmp).size === 0) throw new Error('The downloaded model file is empty.');
+    fs.renameSync(tmp, file);
+    return file;
+  } catch (e) {
+    try { fs.rmSync(tmp, { force: true }); } catch { /* cleanup is best effort */ }
+    throw new Error('Model download failed: ' + e.message);
   }
-  await new Promise((r) => out.end(r));
-  fs.renameSync(tmp, file);
-  return file;
 }
 
 async function ensure(ctx) {
