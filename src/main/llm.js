@@ -18,7 +18,7 @@ function parseToolArguments(raw) {
 }
 const maxSteps = (s) => (s.agent && s.agent.maxSteps) || 25;
 const requestOptions = (settings, provider, model) => (
-  provider === 'openai' && /^gpt-5(?:\.|$)/i.test(String(model || ''))
+  provider === 'openai' && /^gpt-5(?:[.-]|$)/i.test(String(model || ''))
     ? { reasoning_effort: ['low', 'medium', 'high'].includes(settings.llm.reasoningEffort) ? settings.llm.reasoningEffort : 'high' }
     : {}
 );
