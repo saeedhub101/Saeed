@@ -40,6 +40,20 @@ for (const id of fs.readdirSync(path.join(root, 'addons'))) {
 }
 if (!bad) console.log('  ok   add-on manifests');
 
+/* 2c. identical failed tool calls are blocked, while corrected arguments can proceed. */
+try {
+  const runnerFactory = require(path.join(root, 'src/main/llm.js'))._test.createToolRunner;
+  let calls = 0;
+  const runner = runnerFactory(async (_name, args) => { calls++; return args.path === 'missing' ? 'Error: file not found' : 'Saved successfully'; }, { aborted: false });
+  (async () => {
+    await runner('write_file', { path: 'missing' });
+    await runner('write_file', { path: 'missing' });
+    if (calls !== 1) fail('agent repeated an identical failed tool call instead of choosing an alternative');
+    await runner('write_file', { path: 'corrected' });
+    if (calls !== 2) fail('agent blocked a corrected tool call after an earlier failure');
+  })().catch((e) => fail('tool-call retry guard: ' + e.message));
+} catch (e) { fail('tool-call retry guard could not load: ' + e.message); }
+
 /* 2b. agent orchestration must recover from individual tool failures and synthesize the last result. */
 try {
   const agentSource = fs.readFileSync(path.join(root, 'src/main/llm.js'), 'utf8');
