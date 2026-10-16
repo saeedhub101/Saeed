@@ -54,6 +54,17 @@ try {
   }
   if (!agentSource.includes('function createToolRunner')) fail('agent does not guard against repeated failed tool calls');
   if (!agentSource.includes('if (signal && signal.aborted) throw error')) fail('agent swallows cancellation while recovering from tool errors');
+  const llmTest = require(path.join(root, 'src/main/llm.js'))._test;
+  if (llmTest.parseToolArguments('{"path":"ok"}').path !== 'ok') fail('valid tool JSON arguments were not parsed');
+  for (const malformed of ['{bad json', '[]', 'null', '"text"']) {
+    let rejected = false; try { llmTest.parseToolArguments(malformed); } catch { rejected = true; }
+    if (!rejected) fail('invalid tool arguments were accepted: ' + malformed);
+  }
+  const reasoningSettings = { llm: { reasoningEffort: 'high' } };
+  if (llmTest.requestOptions(reasoningSettings, 'openai', 'gpt-5.1').reasoning_effort !== 'high') fail('GPT-5 reasoning effort was not enabled');
+  if (Object.keys(llmTest.requestOptions(reasoningSettings, 'custom', 'gpt-5.1')).length) fail('reasoning parameters leaked to an arbitrary OpenAI-compatible provider');
+  const defaults = require(path.join(root, 'src/main/settings.js')).DEFAULT_SETTINGS;
+  if (defaults.llm.anthropic.model !== 'claude-sonnet-5' || defaults.llm.openai.model !== 'gpt-5.1') fail('default brain models are not current reasoning-capable choices');
 } catch (e) { fail('agent orchestration checks could not run: ' + e.message); }
 
 /* 2c. failed-call guard is awaited before the acceptance process exits. */
