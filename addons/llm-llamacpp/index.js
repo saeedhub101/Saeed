@@ -16,7 +16,7 @@ async function modelFile(ctx) {
   };
   const choice = String(ctx.settings.modelChoice || 'qwen3-0.6b');
   const filename = path.basename(String(ctx.settings.modelFile || presets[choice] || ''));
-  if (!filename || !/\\.gguf$/i.test(filename)) {
+  if (!filename || !/\.gguf$/i.test(filename)) {
     throw new Error('Choose a local GGUF model file in Add-ons → Local brain settings, or download a model there first. Saeed never downloads multi-GB model files automatically.');
   }
   const file = path.join(ctx.dataDir, 'models', filename);
