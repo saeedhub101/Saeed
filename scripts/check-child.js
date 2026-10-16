@@ -62,6 +62,7 @@ try {
   if (parse('{"tool_call":{"name":"delete_everything","args":{}}}', defs).length) fail('local tool parser accepted an unknown tool');
   if (parse('{"tool_call":{"name":"open_item","args":{}}}', defs).length) fail('local tool parser accepted missing required arguments');
   if (parse('{"tool_call":{"name":"express","args":{"intent":"destroy"}}}', defs).length) fail('local tool parser accepted an invalid enum');
+  if (parse('Example JSON only: {"name":"open_item","args":{"name":"Excel"}}', defs).length) fail('local tool parser executed an ordinary JSON example in prose');
   const validate = require(path.join(root, 'src/main/brain.js')).validateToolArgs;
   const nested = { type: 'object', properties: { profile: { type: 'object', properties: { age: { type: 'integer', minimum: 0 } }, required: ['age'] } }, required: ['profile'] };
   if (validate({ profile: { age: 8 } }, nested) !== null) fail('central tool validator rejected valid nested arguments');
