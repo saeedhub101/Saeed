@@ -65,6 +65,12 @@ try {
   if (validate({ profile: { age: 8 } }, nested) !== null) fail('central tool validator rejected valid nested arguments');
   if (!validate({ profile: {} }, nested)) fail('central tool validator accepted missing nested required arguments');
   if (!validate({ profile: { age: -1 } }, nested)) fail('central tool validator accepted out-of-range numeric arguments');
+  const policy = require(path.join(root, 'src/main/brain.js')).confirmationReason;
+  if (!policy('delete_path', { path: 'Documents/old.txt' })) fail('confirmation policy did not protect deletion');
+  if (policy('http_request', { method: 'GET', url: 'https://example.com' })) fail('confirmation policy incorrectly blocked a read-only HTTP request');
+  if (!policy('http_request', { method: 'POST', url: 'https://example.com' })) fail('confirmation policy did not protect an external write request');
+  if (!policy('database__execute', { sql: 'UPDATE customers SET active = 0' })) fail('confirmation policy did not protect database writes');
+  if (policy('database__execute', { sql: 'SELECT * FROM customers' })) fail('confirmation policy incorrectly blocked a read-only database query');
   if (!bad) console.log('  ok   local brain tool-call parsing and schema validation');
 } catch (e) { fail('local brain tool-call tests could not run: ' + e.message); }
 
