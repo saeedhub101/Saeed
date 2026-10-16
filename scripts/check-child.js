@@ -81,6 +81,14 @@ try {
   if (selected.some((x) => x.includes('Excel reports'))) fail('memory retrieval included an unrelated fact ahead of relevant context');
 } catch (e) { fail('memory retrieval checks could not run: ' + e.message); }
 
+/* 2e. skill retrieval normalizes Arabic and ranks directly relevant workflows above vague matches. */
+try {
+  const scoreSkill = require(path.join(root, 'src/main/skills.js'))._test.scoreSkill;
+  const target = { name: 'Create Excel report', app: 'Microsoft Excel', keywords: 'اكسل تقرير ضريبة سنوي', uses: 2, failures: 0 };
+  const unrelated = { name: 'Open browser', app: 'Chrome', keywords: 'website login', uses: 10, failures: 0 };
+  if (scoreSkill(target, 'أنشئ تقرير اكسل للضريبة السنوية') <= scoreSkill(unrelated, 'أنشئ تقرير اكسل للضريبة السنوية')) fail('skill retrieval failed to prioritize a matching Arabic workflow');
+} catch (e) { fail('skill retrieval checks could not run: ' + e.message); }
+
 /* 3. local brain tool-call parsing: tolerant of common formatting, strict about allowed names and schemas. */
 try {
   const parse = require(path.join(root, 'addons/llm-llamacpp/index.js')).__test.parseToolCall;
