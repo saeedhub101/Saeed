@@ -62,6 +62,14 @@ function confirmationSignature(name, args) {
 }
 
 function confirmationReason(name, args) {
+  const highImpactLabel = /\b(submit|send|pay|delete|remove|overwrite|save|purchase|issue|approve|confirm|place order)\b|حذف|ارسال|إرسال|دفع|حفظ|اصدار|إصدار|موافقه|موافقة/i;
+  if (name === 'browser__click' && highImpactLabel.test(String(args.label || ''))) return 'clicking the browser control "' + args.label + '"';
+  if (name === 'desktop-control__ui_click' && highImpactLabel.test(String(args.name || args.automationId || ''))) return 'clicking the desktop control "' + String(args.name || args.automationId) + '"';
+  if (name === 'desktop-control__act' && Array.isArray(args.steps)) {
+    const types = args.steps.some((step) => step && step.action === 'type');
+    const enter = args.steps.some((step) => step && step.action === 'key' && /^(enter|return)$/i.test(String(step.keys || '')));
+    if (types && enter) return 'submitting typed information with the keyboard';
+  }
   if (name === 'delete_path') return 'deleting "' + String(args.path || 'the selected item') + '"';
   if (name === 'write_file' && !args.append && args.path) {
     let target = String(args.path).trim();
