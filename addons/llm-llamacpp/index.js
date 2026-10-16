@@ -256,13 +256,15 @@ module.exports = {
   llm: {
     // Local models receive the same tool catalogue as hosted providers; tools still pass through Saeed's permission broker.
     async complete({ system, messages, tools }, ctx) {
+      // Select the request-specific catalogue before constructing the session; referencing
+      // activeTools before its declaration throws a TDZ ReferenceError on every local turn.
+      const activeTools = selectLocalTools(tools, messages);
       const { LlamaChatSession } = await import('node-llama-cpp');
       const st = await ensure(ctx);
       const seq = st.context.getSequence();
       const session = new LlamaChatSession({ contextSequence: seq, systemPrompt: String(system || '') + toolInstructions(activeTools) });
       try {
-        const activeTools = selectLocalTools(tools, messages);
-        const turns = messages.filter((m) => (m.role === 'user' || m.role === 'assistant' || m.role === 'tool') && m.text);
+        const turns = (Array.isArray(messages) ? messages : []).filter((m) => (m.role === 'user' || m.role === 'assistant' || m.role === 'tool') && m.text);
         const last = turns.pop();
         if (!last) return { text: '', toolCalls: [] };
         const contextSize = Math.max(1024, Math.min(32768, Number(ctx.settings.contextSize) || 4096));
@@ -279,7 +281,7 @@ module.exports = {
           selected.unshift({ ...m, text: value });
           used += value.length;
         }
-        const history = [{ type: 'system', text: String(system || '') + toolInstructions(tools) }];
+        const history = [{ type: 'system', text: String(system || '') + toolInstructions(activeTools) }];
         for (const m of selected) {
           if (m.role === 'user') history.push({ type: 'user', text: m.text });
           else if (m.role === 'assistant') history.push({ type: 'model', response: [m.text] });
