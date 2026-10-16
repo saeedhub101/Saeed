@@ -299,7 +299,8 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
             && (result.ok === false || result.success === false || Boolean(result.error));
           const failed = explicitFailure
             || /\b(?:error|denied|failed|failure|could not|couldn't|unknown tool|tool call rejected|destination already exists|no file with that name|not found|does not exist|permission denied|cannot|invalid|rejected)\b/i.test(summary)
-            || /the user said no|\bHTTP [45]\d\d\b/i.test(summary);
+            || /the user said no|\bHTTP [45]\d\d\b/i.test(summary)
+            || /لم يتم العثور|لم أتمكن|تعذر|مرفوض|غير موجود|لا يوجد|لم ينجح|فشل|خطأ|رفض/i.test(summary);
           markResult(result, !failed);
           return result;
         } catch (error) {
