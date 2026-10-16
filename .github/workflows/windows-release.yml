@@ -3,8 +3,14 @@
 name: Windows Build and Release
 
 on:
-  # Releases are manual only; ordinary commits must never publish an installer.
+  push:
+    branches: [main]
   workflow_dispatch:
+
+# Only the newest main build needs to finish; publishing remains a separate manual decision.
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -86,6 +92,7 @@ jobs:
           $files | ForEach-Object { Write-Host "FOUND: $($_.FullName) ($($_.Length) bytes)" }
 
       - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.1.${{ github.run_number }}
