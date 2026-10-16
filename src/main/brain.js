@@ -118,7 +118,7 @@ function describeCall(name, a) {
   switch (name) {
     case 'desktop-control__ui_click': return `Click "${field(a)}"${where(a)}`;
     case 'desktop-control__ui_set_text': return `Fill in "${field(a)}"${where(a)}`;
-    case 'desktop-control__ui_select': return `Choose "${a.option || ''}" in "${field(a)}"${where(a)}`;
+    case 'desktop-control__ui_select': return `Choose an option in "${field(a)}"${where(a)}`;
     case 'desktop-control__act': return 'Click/type at a fixed screen position (prefer the UI Automation tools next time if the program supports them)';
     case 'desktop-control__ui_read': return `Read "${field(a)}"${where(a)} to check it`;
     case 'desktop-control__ui_table': return `Read the table "${field(a)}"${where(a)}`;
@@ -148,14 +148,17 @@ function keywordsFrom(text) {
 // Called after a turn finishes. Saves what was done automatically, unless the model already saved or corrected a skill itself this turn.
 function autoCapture(text, trace, calledLearn) {
   if (calledLearn || trace.length < 2) return;
-  const actionSteps = trace.filter((c) => ACTION_TOOLS.has(c.name));
-  if (!actionSteps.length) return;                                     // exploring/reading only: nothing to repeat
-  const verifyStep = [...trace].reverse().find((c) => READ_TOOLS.has(c.name));
-  const steps = trace.filter((c) => ACTION_TOOLS.has(c.name) || c === verifyStep).map((c, i) => `${i + 1}. ${describeCall(c.name, c.args)}`).join('\n');
+  const actionSteps = trace.filter((c) => ACTION_TOOLS.has(c.name) && c.ok === true);
+  if (!actionSteps.length) return; // Failed actions are never taught as reusable skills.
+  const lastActionIndex = Math.max(...actionSteps.map((c) => trace.indexOf(c)));
+  const verifyStep = trace.slice(lastActionIndex + 1).reverse().find((c) => READ_TOOLS.has(c.name) && c.ok === true);
+  if (!verifyStep) return; // Require a successful read-back after the last action.
+  const steps = trace.filter((c) => (ACTION_TOOLS.has(c.name) && c.ok === true) || c === verifyStep)
+    .map((c, i) => (i + 1) + '. ' + describeCall(c.name, c.args)).join('\n');
   skills.learn({
     name: String(text).trim().slice(0, 70) || 'Task', app: guessApp(trace), keywords: keywordsFrom(text),
-    steps, verify: verifyStep ? describeCall(verifyStep.name, verifyStep.args) : 'Re-check the result in the program matches the request.',
-    notes: 'learned automatically from a completed task',
+    steps, verify: describeCall(verifyStep.name, verifyStep.args),
+    notes: 'learned automatically after an action and a successful read-back',
   });
 }
 
@@ -193,13 +196,32 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
     const availableTools = toolDefs();
     const reply = await llm.runAgent(settings, {
       system, history: recent, tools: availableTools, signal, onText,
-      execTool: (name, args) => {
+      execTool: async (name, args) => {
         const def = availableTools.find((tool) => tool.name === name);
         if (!def) return 'Tool call rejected: "' + String(name) + '" is not available.';
         const issue = validateToolArgs(args || {}, def.schema);
         if (issue) return 'Tool call rejected because its arguments are invalid: ' + issue + '. Correct the arguments and try again.';
         if (name === 'learn_skill' || name === 'update_skill') calledLearn = true;
-        return execTool(settings, name, args, { onIntent, onTool, signal, trace });
+        const traceStart = trace.length;
+        const resultText = (value) => typeof value === 'string' ? value : String((value && value.text) || JSON.stringify(value) || '');
+        const markResult = (value, ok) => {
+          if (trace.length > traceStart) {
+            const call = trace[trace.length - 1];
+            call.result = resultText(value).slice(0, 800);
+            call.ok = ok;
+          }
+        };
+        try {
+          const result = await execTool(settings, name, args, { onIntent, onTool, signal, trace });
+          const summary = resultText(result);
+          const failed = /^(?:error|denied|failed|could not|couldn't|unknown tool|tool call rejected)\b/i.test(summary)
+            || /the user said no|\bHTTP [45]\d\d\b/i.test(summary);
+          markResult(result, !failed);
+          return result;
+        } catch (error) {
+          markResult(error && error.message ? error.message : String(error), false);
+          throw error;
+        }
       },
     });
     h.push({ role: 'assistant', text: reply, t: Date.now() }); save();
