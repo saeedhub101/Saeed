@@ -10,8 +10,16 @@ let state = null, statePromise = null;
 async function modelFile(ctx) {
   const configuredPath = String(ctx.settings.modelPath || '').trim();
   if (configuredPath && fs.existsSync(configuredPath) && fs.statSync(configuredPath).isFile()) return configuredPath;
-  const url = String(ctx.settings.modelUrl || '').trim();
-  if (!url) throw new Error('Choose a model file or set a model download link in this add-on\'s settings.');
+  const presetUrls = {
+    'qwen3-0.6b': 'https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+    'qwen3-4b': 'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf',
+  };
+  const choice = String(ctx.settings.modelChoice || 'qwen3-4b');
+  const configuredUrl = String(ctx.settings.modelUrl || '').trim();
+  // Older installs may have the previous 4B URL saved in settings. Treat either preset
+  // URL as a preset, so switching models works without requiring users to clear old settings.
+  const isPresetUrl = Object.values(presetUrls).includes(configuredUrl);
+  const url = configuredUrl && !isPresetUrl ? configuredUrl : (presetUrls[choice] || presetUrls['qwen3-4b']);
   let filename;
   try {
     const parsed = new URL(url);
