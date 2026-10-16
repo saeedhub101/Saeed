@@ -184,6 +184,9 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
   const msgs = [{ role: 'system', content: system }, ...history.map((m) => ({ role: m.role, content: oContent(m) }))];
   const toolDefs = tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.schema } }));
   const key = secrets.get(name);
+  if (!key && /api\\.openai\\.com/i.test(String(p.baseUrl || ''))) {
+    throw new Error('No OpenAI API key is configured. Basic greetings work offline; for general AI conversation, add a key in Settings → Brain or select a configured local brain.');
+  }
   let all = '';
   const runTool = createToolRunner(execTool, signal);
   for (let i = 0; i < maxSteps(s); i++) {
