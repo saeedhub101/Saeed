@@ -155,8 +155,8 @@ jobs:
           name: Saeed v${{ inputs.version }}
           generate_release_notes: true
           files: |
-            dist/*.exe
-            dist/*.blockmap
+            dist/Saeed Setup ${{ inputs.version }}.exe
+            dist/Saeed Setup ${{ inputs.version }}.exe.blockmap
             dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
