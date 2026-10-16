@@ -100,8 +100,8 @@ function selectLocalTools(tools, messages) {
   // Do not let an old request keep privileged tools visible in a later, unrelated turn.
   // Only inherit the previous task when the latest user message is clearly a short follow-up.
   const latestTrimmed = latest.trim();
-  const followUp = /^(?:yes|yeah|yep|ok|okay|sure|continue|go ahead|do it|proceed|that one|same|نعم|اه|أه|تمام|اكمل|تابع|نفذ|اعملها|كمل|موافق|نفسه|نفسها)[.!؟?\\s]*$/i.test(latestTrimmed)
-    || (latestTrimmed.split(/\\s+/).length <= 3 && /^(?:yes|yeah|yep|ok|okay|sure|continue|go ahead|do it|proceed|نعم|اه|أه|تمام|اكمل|تابع|نفذ|اعملها|كمل|موافق)/i.test(latestTrimmed));
+  const followUp = /^(?:yes|yeah|yep|ok|okay|sure|continue|go ahead|do it|proceed|that one|same|نعم|اه|أه|تمام|اكمل|تابع|نفذ|اعملها|كمل|موافق|نفسه|نفسها)[.!؟?\s]*$/i.test(latestTrimmed)
+    || (latestTrimmed.split(/\s+/).length <= 3 && /^(?:yes|yeah|yep|ok|okay|sure|continue|go ahead|do it|proceed|نعم|اه|أه|تمام|اكمل|تابع|نفذ|اعملها|كمل|موافق)/i.test(latestTrimmed));
   const userText = followUp && previous ? previous + ' ' + latest : latest;
   const text = userText.toLowerCase().replace(/[\u064B-\u065F\u0670]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
   const recentToolContext = (Array.isArray(messages) ? messages : []).filter((m) => m && m.role === 'tool').slice(-2).map((m) => String(m.text || '').slice(-600)).join(' ');
