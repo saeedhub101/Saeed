@@ -179,7 +179,7 @@ module.exports = {
           else history.push({ type: 'user', text: `Tool result (${m.name || m.toolCallId || 'tool'}):\n${m.text}` });
         }
         session.setChatHistory(history);
-        const maxTokens = Math.max(64, Math.min(4096, Number(ctx.settings.maxTokens) || 600));
+        const maxTokens = Math.max(64, Math.min(4096, contextSize - 512, Number(ctx.settings.maxTokens) || 600));
         const currentLimit = Math.max(800, Math.min(5000, Math.floor(contextSize * 0.8)));
         const currentText = String(last.text || '');
         const promptText = last.role === 'tool'
