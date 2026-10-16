@@ -11,7 +11,7 @@ async function modelFile(ctx) {
   const configuredPath = String(ctx.settings.modelPath || '').trim();
   if (configuredPath && fs.existsSync(configuredPath) && fs.statSync(configuredPath).isFile()) return configuredPath;
   const presetUrls = {
-    'qwen3-0.6b': 'https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf',
+    'qwen3-0.6b': 'https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_0.gguf',
     'qwen3-4b': 'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf',
   };
   const choice = String(ctx.settings.modelChoice || 'qwen3-4b');
