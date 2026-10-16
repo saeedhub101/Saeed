@@ -281,6 +281,13 @@ try {
     if (actions.isGreeting('hello, please create a spreadsheet')) fail('greeting matcher swallowed a real task request');
     const pipelineSource = fs.readFileSync(path.join(root, 'src/main/pipeline.js'), 'utf8');
     if (!pipelineSource.includes('s.commands.local || actions.isGreeting(text)')) fail('greetings still depend on the optional local-commands setting');
+    const defaults = require(path.join(root, 'src/main/settings.js')).DEFAULT_SETTINGS;
+    const whisperManifest = JSON.parse(fs.readFileSync(path.join(root, 'addons/whisper-local/addon.json'), 'utf8'));
+    if (defaults.stt.provider !== 'addon:whisper-local') fail('new installs do not default to offline speech recognition');
+    if (defaults.addons.enabled['whisper-local'] !== true) fail('local speech recognition is not enabled by default');
+    if (whisperManifest.bundle !== 'auto') fail('local speech recognition is not included in the installer');
+    const mainSource = fs.readFileSync(path.join(root, 'src/main/main.js'), 'utf8');
+    if (!mainSource.includes("cfg.settings.stt.provider = 'addon:whisper-local'")) fail('existing installs do not migrate away from cloud STT when no key is configured');
     const llmSource = fs.readFileSync(path.join(root, 'src/main/llm.js'), 'utf8');
     if (!llmSource.includes('No OpenAI API key is configured')) fail('missing OpenAI credentials do not produce a clear actionable error');
     if (!llmSource.includes('select a configured local brain')) fail('missing-key guidance does not mention a local brain option');
