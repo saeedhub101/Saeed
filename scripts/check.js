@@ -40,7 +40,20 @@ fs.writeFileSync(path.join(stub, 'index.js'), `const mk = () => new Proxy(functi
 const e = mk();
 module.exports = new Proxy({}, { get: (_t, k) => { if (k === 'app') return { getPath: () => ${JSON.stringify(os.tmpdir())}, getAppPath: () => ${JSON.stringify(root)}, isPackaged: false, requestSingleInstanceLock: () => true, setAppUserModelId() {}, whenReady: () => ({ then() {} }), on() {}, getVersion: () => '0.0.0', getLoginItemSettings: () => ({}), commandLine: { appendSwitch() {} } }; if (k === 'safeStorage') return { isEncryptionAvailable: () => false }; if (k === 'screen') return { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 }, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }), getAllDisplays: () => [] }; if (k === 'ipcMain') return { handle() {}, on() {} }; return e; } });
 `);
-const child = spawnSync(process.execPath, [path.join(__dirname, 'check-child.js')], { encoding: 'utf8', env: { ...process.env, NODE_PATH: path.join(os.tmpdir(), 'saeed-check', 'node_modules') } });
+const shim = path.join(os.tmpdir(), 'saeed-check', 'electron-shim.js');
+// NODE_PATH has lower precedence than the project's installed node_modules, so the real
+// Electron package was loaded in plain Node and exposed no app object. Force only the
+// "electron" import in this isolated acceptance child to use the deterministic stub.
+fs.writeFileSync(shim, `const Module = require('module');
+const path = require('path');
+const electronStub = path.join(${JSON.stringify(path.join(os.tmpdir(), 'saeed-check', 'node_modules', 'electron'))}, 'index.js');
+const originalLoad = Module._load;
+Module._load = function(request, parent, isMain) {
+  if (request === 'electron') return originalLoad.call(this, electronStub, parent, isMain);
+  return originalLoad.call(this, request, parent, isMain);
+};
+`);
+const child = spawnSync(process.execPath, [path.join(__dirname, 'check-child.js')], { encoding: 'utf8', env: { ...process.env, NODE_PATH: path.join(os.tmpdir(), 'saeed-check', 'node_modules'), NODE_OPTIONS: [process.env.NODE_OPTIONS, `--require=${shim}`].filter(Boolean).join(' ') } });
 process.stdout.write(child.stdout);
 if (child.status !== 0) failed++;
 
