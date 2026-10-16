@@ -39,8 +39,8 @@ const CORE_TOOLS = [
   { name: 'open_item', description: 'Open an app, folder or file for the user: Excel, Word, PowerPoint, Notepad, Calculator, My Computer, Downloads, Documents, or an item from the user\'s quick launch list.',
     schema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } },
   { name: 'get_time', description: 'Get the current local date and time.', schema: { type: 'object', properties: {} } },
-  { name: 'confirm_with_user', description: 'Ask the user a yes/no question in a window and wait for the answer. Use it before irreversible steps (submit, issue, send, pay, delete) and before anything the user did not fully specify.',
-    schema: { type: 'object', properties: { question: { type: 'string' } }, required: ['question'] } },
+  { name: 'confirm_with_user', description: 'Ask the user a yes/no question in a window and wait for the answer. Before an irreversible action, include actionName and actionArgs exactly matching the tool call you want to perform next; a yes approves only that exact action.',
+    schema: { type: 'object', properties: { question: { type: 'string' }, actionName: { type: 'string', description: 'Exact tool name of the action being confirmed' }, actionArgs: { type: 'object', description: 'Exact arguments for that action' } }, required: ['question'] } },
   { name: 'recall_skills', description: 'Look up skills you previously learned that might apply to the current task (by name, app or keywords).',
     schema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
   { name: 'learn_skill', description: 'Save a skill after successfully completing a multi-step task in a program or system, so it is faster and more reliable next time. Give the exact sequence of steps that worked (tool calls and field names, not coordinates), and how to verify it succeeded. Give the same name and app again to update an existing skill.',
@@ -55,6 +55,12 @@ const toolDefs = () => [...CORE_TOOLS, ...core.defs(), ...addons.toolDefs()];
 
 // High-impact actions require an explicit yes for that next action, even if a permission
 // capability is configured to allow the underlying operation.
+function confirmationSignature(name, args) {
+  const stable = (value) => Array.isArray(value) ? value.map(stable)
+    : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])])) : value;
+  return JSON.stringify({ name: String(name || ''), args: stable(args || {}) });
+}
+
 function confirmationReason(name, args) {
   if (name === 'delete_path') return 'deleting "' + String(args.path || 'the selected item') + '"';
   if (name === 'write_file' && !args.append && args.path) {
@@ -120,10 +126,11 @@ async function execTool(settings, name, args, { onIntent, onTool, signal, trace,
   const issue = validateToolArgs(args, def.schema);
   if (issue) return 'Tool call rejected because its arguments are invalid: ' + issue + '. Correct the arguments and try again.';
   const confirmation = confirmationReason(name, args);
-  if (confirmation && !(policy && policy.confirmedNextAction)) {
-    return 'Action paused: explicit confirmation is required before ' + confirmation + '. Call confirm_with_user with a clear question, then retry only if the user says yes.';
+  const signature = confirmation ? confirmationSignature(name, args) : '';
+  if (confirmation && !(policy && policy.confirmedAction === signature)) {
+    return 'Action paused: explicit confirmation is required before ' + confirmation + '. Call confirm_with_user with a clear question plus actionName="' + name + '" and actionArgs exactly matching this tool call, then retry only if the user says yes.';
   }
-  if (confirmation && policy) policy.confirmedNextAction = false;
+  if (confirmation && policy) policy.confirmedAction = null;
   if (onTool) onTool({ name, args });
   if (trace) traceCall(trace, name, args);
   if (name === 'express') { if (INTENTS.includes(args.intent) && onIntent) onIntent(args.intent); return 'ok'; }
@@ -132,7 +139,11 @@ async function execTool(settings, name, args, { onIntent, onTool, signal, trace,
   if (name === 'confirm_with_user') {
     const r = await dialog.showMessageBox({ type: 'question', title: 'Saeed asks you', message: String(args.question || 'Continue?'), buttons: ['Yes, go ahead', 'No'], defaultId: 1, cancelId: 1, noLink: true });
     const result = r.response === 0 ? 'The user said yes.' : 'The user said no. Do not continue with this step.';
-    if (policy) policy.confirmedNextAction = result === 'The user said yes.';
+    if (policy) {
+      policy.confirmedAction = result === 'The user said yes.' && typeof args.actionName === 'string'
+        && args.actionArgs && typeof args.actionArgs === 'object' && !Array.isArray(args.actionArgs)
+        ? confirmationSignature(args.actionName, args.actionArgs) : null;
+    }
     return result;
   }
   if (name === 'recall_skills') { const r = skills.recall(args.query); return r.length ? JSON.stringify(r.map(({ id, name, app, steps, fields, verify, notes, uses, failures }) => ({ id, name, app, steps, fields, verify, notes, usedBefore: uses, failedBefore: failures }))) : 'No matching skill was learned yet.'; }
@@ -232,7 +243,7 @@ async function ask(text, { signal, onIntent, onTool, onText, settings, images = 
   const customPrompt = String(settings.llm.systemPrompt || '').trim();
   // A custom prompt should add preferences, not silently remove Saeed's core tool-use and verification rules.
   const system = DEFAULT_PROMPT + (customPrompt ? `\n\nAdditional user instructions (apply when compatible with the core rules):\n${customPrompt}` : '') + procedureText(settings, text) + (settings.memory && settings.memory.enabled ? memory.promptText() : '') + skills.promptText(text) + `\nCurrent local date and time: ${new Date().toLocaleString()}.`;
-  const trace = [], policy = { confirmedNextAction: false }; let calledLearn = false;
+  const trace = [], policy = { confirmedAction: null }; let calledLearn = false;
   try {
     const availableTools = toolDefs();
     const reply = await llm.runAgent(settings, {
@@ -284,4 +295,4 @@ const history = () => load().slice(-100);
 function clear() { hist = []; save(); }
 
 const defaultPrompt = () => DEFAULT_PROMPT;
-module.exports = { ask, remember, history, clear, toolDefs, execTool, defaultPrompt, validateToolArgs, confirmationReason };
+module.exports = { ask, remember, history, clear, toolDefs, execTool, defaultPrompt, validateToolArgs, confirmationReason, confirmationSignature };
