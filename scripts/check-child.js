@@ -64,6 +64,8 @@ try {
   }
   const autoSearchCases = [
     ['Where is Rome?', true],
+    ['What is photosynthesis?', true],
+    ['How does a solar panel work?', true],
     ['What is the weather in Jordan today?', true],
     ['كم الساعة في إيطاليا؟', true],
     ['أين تقع روما؟', true],
