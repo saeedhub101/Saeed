@@ -36,8 +36,16 @@ jobs:
           npm install --omit=dev --no-audit --no-fund
           if ($LASTEXITCODE -ne 0) { throw "Local model runtime installation failed." }
           Pop-Location
+      - name: Provision test model explicitly for CI
+        shell: pwsh
+        run: |
+          $model = Join-Path $env:RUNNER_TEMP "Qwen3-4B-Q4_K_M.gguf"
+          Invoke-WebRequest -Uri "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf" -OutFile $model
+          if (!(Test-Path $model) -or (Get-Item $model).Length -lt 1MB) { throw "CI test model download failed or was incomplete." }
       - name: Run real Qwen3-4B answer and evidence checks
         shell: pwsh
+        env:
+          SAEED_TEST_MODEL_PATH: ${{ runner.temp }}\\Qwen3-4B-Q4_K_M.gguf
         run: |
           node scripts/test-local-brain.js
           if ($LASTEXITCODE -ne 0) { throw "The real local brain failed its answer-quality checks." }
