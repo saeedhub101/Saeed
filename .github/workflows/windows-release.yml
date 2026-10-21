@@ -1,18 +1,11 @@
-name: Saeed Windows Build and Release
+# Windows-only packaging and release workflow
+# Electron Builder creates the installer locally; the release action publishes it.
+name: Windows Build and Release
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Release version (MAJOR.MINOR.PATCH)"
-        required: true
-        type: string
-
-concurrency:
-  group: ${{ github.event_name == 'workflow_dispatch' && format('saeed-release-{0}', github.ref) || format('saeed-build-{0}', github.ref) }}
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 permissions:
   contents: write
@@ -20,96 +13,87 @@ permissions:
 jobs:
   build-release:
     runs-on: windows-latest
-    timeout-minutes: 60
     steps:
-      - name: Checkout full history and tags
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Set up Node.js
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Choose release version
-        id: version
         shell: pwsh
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
-          EVENT_NAME: ${{ github.event_name }}
-          RUN_NUMBER: ${{ github.run_number }}
+        run: npm install
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: npm run dist -- --publish never
+
+      - name: Verify packaged runtime files
+        shell: pwsh
         run: |
-          $package = Get-Content package.json -Raw | ConvertFrom-Json
-          $current = [version]$package.version
-          if ($env:EVENT_NAME -eq 'workflow_dispatch') {
-            if ($env:INPUT_VERSION -notmatch '^\d+\.\d+\.\d+$') { throw 'Version must be MAJOR.MINOR.PATCH.' }
-            git fetch --tags --force
-            if (git tag --list "v$($env:INPUT_VERSION)") { throw 'That version tag already exists.' }
-            if ([version]$env:INPUT_VERSION -le $current) { throw 'Requested version must exceed package.json version.' }
-            $version = $env:INPUT_VERSION
-          } else {
-            $parts = $current.ToString().Split('.')
-            $patch = [Math]::Max(([int]$parts[2] + 1), [int]$env:RUN_NUMBER)
-            $version = "$($parts[0]).$($parts[1]).$patch"
-            git fetch --tags --force
-            while (git tag --list "v$version") { $patch++; $version = "$($parts[0]).$($parts[1]).$patch" }
+          if (-not (Test-Path "src/vendor/three/three.module.js")) {
+            Write-Error "Vendored Three.js runtime module was not generated."
+            exit 1
           }
-          npm version $version --no-git-tag-version
-          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "tag=v$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-      - name: Run syntax, module, IPC, and add-on checks
-        run: npm run check
-      - name: Prepare bundled Three.js runtime
-        run: node scripts/vendor.js
-      - name: Build and package add-ons
-        run: node scripts/build-addons.js
-      - name: Build Windows x64 installer
-        run: npx electron-builder --win nsis --publish never
-      - name: Generate electron-updater metadata
+          if (-not (Test-Path "src/vendor/three/addons/loaders/GLTFLoader.js")) {
+            Write-Error "Vendored Three.js GLTFLoader was not generated."
+            exit 1
+          }
+          if (-not (Test-Path "src/vendor/three/addons/exporters/GLTFExporter.js")) {
+            Write-Error "Vendored Three.js GLTFExporter was not generated."
+            exit 1
+          }
+          if (-not (Test-Path "node_modules/electron-builder")) {
+            Write-Error "electron-builder is missing from node_modules."
+            exit 1
+          }
+          $asar = "dist/win-unpacked/resources/app.asar"
+          if (-not (Test-Path $asar)) {
+            Write-Error "Packaged app.asar was not produced."
+            exit 1
+          }
+          $extract = "$env:TEMP/app-asar-extracted"
+          if (Test-Path $extract) { Remove-Item $extract -Recurse -Force }
+          npx --yes @electron/asar extract "$asar" "$extract"
+          $required = @(
+            "src/renderer/avatar.js",
+            "src/renderer/avatar.html",
+            "src/renderer/studio.js",
+            "src/renderer/studio.html",
+            "src/shared/character.js",
+            "src/vendor/three/three.module.js",
+            "src/vendor/three/addons/loaders/GLTFLoader.js",
+            "src/vendor/three/addons/exporters/GLTFExporter.js"
+          )
+          foreach ($item in $required) {
+            $path = Join-Path $extract ($item -replace '/', '\')
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              Write-Error "Missing from extracted app.asar: $item"
+              exit 1
+            }
+            Write-Host "ASAR OK: $item"
+          }
+
+      - name: Verify installer
         shell: pwsh
         run: |
-          $package = Get-Content package.json -Raw | ConvertFrom-Json
-          $installer = Get-ChildItem -Path dist -File -Filter '*.exe' | Where-Object { $_.Name -notlike '__uninstaller*' } | Select-Object -First 1
-          if (-not $installer) { throw 'Cannot create updater metadata: installer is missing.' }
-          $sha = [System.Security.Cryptography.SHA512]::Create()
-          $stream = [System.IO.File]::OpenRead($installer.FullName)
-          try { $hash = [Convert]::ToBase64String($sha.ComputeHash($stream)) } finally { $stream.Dispose(); $sha.Dispose() }
-          $releaseDate = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
-          $metadata = @(
-            "version: $($package.version)"
-            'files:'
-            "  - url: `"$($installer.Name)`""
-            "    sha512: $hash"
-            "    size: $($installer.Length)"
-            "path: `"$($installer.Name)`""
-            "sha512: $hash"
-            "releaseDate: '$releaseDate'"
-          ) -join "`n"
-          Set-Content -Path 'dist/latest.yml' -Value $metadata -Encoding utf8NoBOM
-      - name: Verify installer and updater metadata
-        shell: pwsh
-        run: |
-          $version = '${{ steps.version.outputs.version }}'
-          $installer = Get-ChildItem dist -File -Filter '*.exe' | Where-Object { $_.Name -notlike '__uninstaller*' } | Select-Object -First 1
-          if (-not $installer) { throw 'No Windows installer was produced.' }
-          if (-not (Test-Path 'dist/latest.yml')) { throw 'dist/latest.yml is missing.' }
-          $metadata = Get-Content 'dist/latest.yml' -Raw
-          if ($metadata -notmatch "(?m)^version:\s*$([regex]::Escape($version))\s*$") { throw 'Updater metadata version mismatch.' }
-          if ($metadata -notlike "*$($installer.Name)*") { throw 'Updater metadata does not reference the installer.' }
-          if (-not (Test-Path 'src/vendor/three/addons/loaders/GLTFLoader.js')) { throw 'Vendored GLTFLoader is missing.' }
-          if (-not (Test-Path 'dist/win-unpacked/resources/app.asar')) { throw 'Packaged app.asar is missing.' }
-          Write-Host "Verified $($installer.Name) for version $version"
-      - name: Publish GitHub Release
+          $files = Get-ChildItem -Path dist -File -Filter *.exe -ErrorAction SilentlyContinue
+          if (-not $files) {
+            Write-Error "No Windows .exe installer was produced."
+            exit 1
+          }
+          $files | ForEach-Object { Write-Host "FOUND: $($_.FullName) ($($_.Length) bytes)" }
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          name: Saeed v${{ steps.version.outputs.version }}
-          target_commitish: ${{ github.sha }}
+          tag_name: v0.1.${{ github.run_number }}
+          name: Avatar Agent v0.1.${{ github.run_number }}
           generate_release_notes: true
           files: |
             dist/*.exe
             dist/*.blockmap
-            dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
