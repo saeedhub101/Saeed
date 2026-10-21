@@ -1,6 +1,14 @@
 // Runs with an electron stub on NODE_PATH (see check.js): loads every main-process module, validates add-on manifests.
-const fs = require('fs'), path = require('path');
+const fs = require('fs'), path = require('path'), os = require('os'), Module = require('module');
 const root = path.join(__dirname, '..');
+
+// Local node_modules wins over NODE_PATH, so explicitly route Electron imports to the test stub.
+const electronStub = path.join(os.tmpdir(), 'saeed-check', 'node_modules', 'electron');
+const originalLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  if (request === 'electron') return originalLoad.call(this, electronStub, parent, isMain);
+  return originalLoad.call(this, request, parent, isMain);
+};
 let bad = 0;
 const fail = (m) => { bad++; console.log('  FAIL ' + m); };
 
