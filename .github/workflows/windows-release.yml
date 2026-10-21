@@ -58,6 +58,8 @@ jobs:
           npm version $version --no-git-tag-version
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "tag=v$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - name: Run syntax, module, IPC, and add-on checks
+        run: npm run check
       - name: Prepare bundled Three.js runtime
         run: node scripts/vendor.js
       - name: Build and package add-ons
