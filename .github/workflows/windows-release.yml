@@ -66,6 +66,27 @@ jobs:
         run: node scripts/build-addons.js
       - name: Build Windows x64 installer
         run: npx electron-builder --win nsis --publish never
+      - name: Generate electron-updater metadata
+        shell: pwsh
+        run: |
+          $package = Get-Content package.json -Raw | ConvertFrom-Json
+          $installer = Get-ChildItem -Path dist -File -Filter '*.exe' | Where-Object { $_.Name -notlike '__uninstaller*' } | Select-Object -First 1
+          if (-not $installer) { throw 'Cannot create updater metadata: installer is missing.' }
+          $sha = [System.Security.Cryptography.SHA512]::Create()
+          $stream = [System.IO.File]::OpenRead($installer.FullName)
+          try { $hash = [Convert]::ToBase64String($sha.ComputeHash($stream)) } finally { $stream.Dispose(); $sha.Dispose() }
+          $releaseDate = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ss.fffZ')
+          $metadata = @(
+            "version: $($package.version)"
+            'files:'
+            "  - url: `"$($installer.Name)`""
+            "    sha512: $hash"
+            "    size: $($installer.Length)"
+            "path: `"$($installer.Name)`""
+            "sha512: $hash"
+            "releaseDate: '$releaseDate'"
+          ) -join "`n"
+          Set-Content -Path 'dist/latest.yml' -Value $metadata -Encoding utf8NoBOM
       - name: Verify installer and updater metadata
         shell: pwsh
         run: |
