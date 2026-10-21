@@ -11,8 +11,8 @@ on:
         type: string
 
 concurrency:
-  group: saeed-release-${{ github.ref }}
-  cancel-in-progress: false
+  group: ${{ github.event_name == 'workflow_dispatch' && format('saeed-release-{0}', github.ref) || format('saeed-build-{0}', github.ref) }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 permissions:
   contents: write
