@@ -16,6 +16,39 @@ const C = (name, duration, loop, tracks) => ({
   })),
 });
 
+// Mirrors a one-shot clip in time (new_t = duration - t), so "getting up" is exactly the reverse path of
+// "lying down": same joints, same timing, run backwards. Real people don't get up by literally rewinding how
+// they lay down, but for a keyframed rig this reads naturally and guarantees the two motions meet in the middle
+// with no popping, since the end of one is by construction the start of the other.
+function reverseClip(src, name) {
+  return {
+    name, duration: src.duration, loop: false,
+    tracks: src.tracks.map((tr) => ({
+      bone: tr.bone,
+      keys: tr.keys.map((k) => ({ t: +(src.duration - k.t).toFixed(3), r: k.r.slice(), p: k.p ? k.p.slice() : undefined })).sort((a, b) => a.t - b.t),
+    })),
+  };
+}
+
+// The getting-down motion that plays once, on top of the base-pose crossfade, whenever Saeed lies down or
+// goes to sleep: kneel, lower onto a braced arm, then settle flat. Its last keyframe matches lie_idle's loop
+// exactly, so when it fades out the resting loop is already there and the hand-off is seamless. stand_up below
+// is this clip played backwards, so standing back up retraces the same path in reverse.
+const LIE_DOWN = C('lie_down', 2.6, false, {
+  hips: [[0, 0, 0, 0, [0, 0, 0]], [0.9, 0, 0, 20, [0, -0.22, 0]], [1.7, 0, 0, 60, [0, -0.34, 0]], [2.6, 0, 0, 90, [0, -0.43, 0]]],
+  spine: [[0, 0, 0, 0], [0.9, 18, 0, 0], [1.7, 10, 0, 0], [2.6, 0, 0, 0]],
+  chest: [[0, 0, 0, 0], [0.9, 22, 0, 0], [1.7, 14, 0, 0], [2.6, 0, 0, 0]],
+  head: [[0, 0, 0, 0], [0.9, 16, 0, 0], [1.7, 7, 0, 2], [2.6, 0, 0, 4]],
+  leftUpperLeg: [[0, 0, 0, 5], [0.9, -68, 0, 8], [1.7, -40, 0, 6], [2.6, 0, 0, 0]],
+  rightUpperLeg: [[0, 0, 0, -5], [0.9, -68, 0, -8], [1.7, -40, 0, -6], [2.6, 0, 0, 0]],
+  leftLowerLeg: [[0, 0, 0, 0], [0.9, 108, 0, 0], [1.7, 55, 0, 0], [2.6, 12, 0, 0]],
+  rightLowerLeg: [[0, 0, 0, 0], [0.9, 108, 0, 0], [1.7, 55, 0, 0], [2.6, 12, 0, 0]],
+  rightUpperArm: [[0, 0, 0, 0], [0.9, -55, 10, -22], [1.7, -35, 5, -12], [2.6, 0, 0, 0]],
+  rightLowerArm: [[0, 0, 0, 0], [0.9, -65, 0, 0], [1.7, -30, 0, 0], [2.6, 0, 0, 0]],
+  leftUpperArm: [[0, 0, 0, 0], [0.9, -10, 0, 15], [1.7, -6, 0, 8], [2.6, 0, 0, 0]],
+  leftLowerArm: [[0, 0, 0, 0], [0.9, -15, 0, 0], [1.7, -8, 0, 0], [2.6, 0, 0, 0]],
+});
+
 const BUILTIN = {
   idle: C('idle', 6, true, {
     chest: [[0, 0, 0, 0], [3, 1.5, 0, 0], [6, 0, 0, 0]],
@@ -89,6 +122,8 @@ const BUILTIN = {
     rightLowerArm: [[0, -55, 0, 0], [6, -55, 0, 0]],
     head: [[0, -2, 0, 0], [3, -1, 2, 0], [6, -2, 0, 0]],
   }),
+  lie_down: LIE_DOWN,
+  stand_up: reverseClip(LIE_DOWN, 'stand_up'),
   lie_idle: C('lie_idle', 7, true, {
     hips: [[0, 0, 0, 90, [0, -0.43, 0]], [3.5, 0, 0, 90, [0, -0.428, 0]], [7, 0, 0, 90, [0, -0.43, 0]]],
     chest: [[0, 0, 0, 0], [3.5, 2.5, 0, 0], [7, 0, 0, 0]],
@@ -145,12 +180,15 @@ export const INTENTS = {
   kiss: { expr: 'kiss', hold: 1.2 },
   brows: { expr: 'browUp', hold: 1.2 },
   adhan: { clips: ['adhan'] },
-  // Postures change the base pose (the engine blends to it smoothly).
+  // Postures change the base pose (the engine blends to it smoothly). lie and sleep also play a one-shot
+  // getting-down motion (kneel, brace on a hand, settle flat) instead of just crossfading the end pose.
   sit: { base: 'sit_idle' },
-  lie: { base: 'lie_idle' },
-  sleep: { base: 'sleep_idle' },
-  stand: { base: 'idle' },
-  wake: { base: 'idle' },
+  lie: { base: 'lie_idle', clips: ['lie_down'] },
+  sleep: { base: 'sleep_idle', clips: ['lie_down'] },
+  // stand_up only actually plays when coming from lying/sleeping (character.js checks this); from sitting it
+  // just crossfades as before, since there is no dedicated stand-from-sit motion yet.
+  stand: { base: 'idle', clips: ['stand_up'] },
+  wake: { base: 'idle', clips: ['stand_up'] },
 };
 
 // Camera framing per posture (scale of the character, vertical shift in world units).

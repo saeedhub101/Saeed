@@ -280,10 +280,13 @@ export class Character {
   command(name, args = {}) {
     if (!this.model) return null;
     const intent = { ...INTENTS, ...(this.cfg.intents || {}) }[name];
+    // lie_down only plays coming from standing (already down just holds the pose); stand_up only plays coming
+    // from lying/sleeping (standing up from sitting still just crossfades, no dedicated motion for that yet).
+    const wasDown = this.base === 'lie_idle' || this.base === 'sleep_idle';
     if (intent && intent.base) this.setBase(intent.base);
     let clipName = null, glbName = null;
     if (intent) {
-      const own = (intent.clips || []).filter((c) => this.clips[c]);
+      const own = (intent.clips || []).filter((c) => this.clips[c] && !(wasDown && c === 'lie_down') && !(!wasDown && c === 'stand_up'));
       const glb = this.glbAsIntent[name] || [];
       const opts = [...own, ...glb];
       const fresh = opts.filter((c) => c !== this.lastClip);

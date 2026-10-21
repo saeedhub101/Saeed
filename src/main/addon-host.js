@@ -53,7 +53,6 @@ port.on('message', async (e) => {
       reply(m.id, true, true);
     } else if (m.type === 'call') {
       const fn = m.target === 'tool' ? mod.tools && mod.tools[m.name]
-        : m.target === 'llm' ? mod.llm && mod.llm.complete
         : m.target === 'stt' ? mod.stt && mod.stt.transcribe
         : m.target === 'tts' ? mod.tts && mod.tts.synthesize : null;
       if (!fn) throw new Error(`This add-on does not provide ${m.target} ${m.name || ''}`);

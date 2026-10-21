@@ -1,7 +1,7 @@
 {
   "name": "avatar-agent",
-  "productName": "Saeed",
-  "version": "0.7.0",
+  "productName": "Avatar Agent",
+  "version": "0.8.0",
   "description": "Saeed: desktop 3D avatar assistant (voice, chat, brain) with a studio for bones, poses and motions.",
   "main": "src/main/main.js",
   "author": "Saeed",
@@ -11,6 +11,7 @@
     "start": "node scripts/vendor.js && electron .",
     "predist": "node scripts/check.js && node scripts/vendor.js && node scripts/build-addons.js",
     "dist": "electron-builder --win nsis",
+    "release": "node scripts/check.js && node scripts/vendor.js && node scripts/build-addons.js && electron-builder --win nsis --publish always",
     "build-addons": "node scripts/build-addons.js",
     "check": "node scripts/check.js"
   },
@@ -26,7 +27,7 @@
   },
   "build": {
     "appId": "com.avataragent.app",
-    "productName": "Saeed",
+    "productName": "Avatar Agent",
     "directories": {
       "output": "dist"
     },
@@ -51,7 +52,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Saeed"
+      "shortcutName": "Avatar Agent"
     },
     "asarUnpack": [
       "src/main/addon-host.js"
@@ -59,8 +60,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "saeedhub101",
-        "repo": "Saeed"
+        "owner": "OWNER",
+        "repo": "saeed"
       }
     ],
     "extraResources": [

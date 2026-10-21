@@ -91,6 +91,8 @@ api.onCommand((cmd, args) => {
 let rtRate = 24000, rtBuf = [], rtLen = 0, lastActive = performance.now(), thinking = false;
 const markActive = () => { lastActive = performance.now(); };
 const behavior = new Behavior(ch, api);
+const moodEl = document.getElementById('mood');
+let lastMood = '';
 const voice = new Voice(() => cfg.settings, {
   onRaw: (data, rate, gain) => {
     const r = resample(data, rate, rtRate, gain);
@@ -176,7 +178,8 @@ api.onPipeline(async (ev) => {
     case 'rt-text': if (a.muted || a.bubbleAlways) showBubble(ev.text, Math.min(12000, Math.max(3000, ev.text.length * 65))); break;
     case 'rt-state': if (ev.state === 'closed' && voice.live) { micOff(); showBubble('The live conversation ended.', 3000); } break;
     case 'notice': showBubble(ev.text, 8000); break;
-    case 'error': showBubble(ev.text, 7000); break;
+    case 'mood': behavior.notice(ev.notice); break;
+    case 'error': showBubble(ev.text, 7000); behavior.notice('failure'); break;
     default: break;
   }
 });
@@ -241,6 +244,7 @@ function frame(now) {
   acc = 0;
   ch.update(dt);
   behavior.tick({ dtSec: dt, idleMs: now - lastActive, busy: engaged });
+  if (behavior.mood !== lastMood) { lastMood = behavior.mood; moodEl.className = 'mood-' + lastMood; moodEl.title = lastMood; }
   renderer.render(scene, camera);
   hitTest();
   placeBubble();

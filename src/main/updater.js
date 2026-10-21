@@ -2,20 +2,7 @@
 // Update check, download and install through electron-updater (GitHub Releases).
 const { app } = require('electron');
 
-let au = null, state = { state: 'idle', current: app.getVersion() }, emit = () => {}, getSettings = () => ({});
-const DEFAULT_REPOSITORY = 'saeedhub101/Saeed';
-function repository(value) {
-  const candidate = String(value || DEFAULT_REPOSITORY).trim()
-    .replace(/^https?:\/\/github\.com\//i, '')
-    .replace(/\.git$/i, '')
-    .replace(/^\/+|\/+$/g, '');
-  const normalized = /^saeedhub\/Saeed$/i.test(candidate) ? DEFAULT_REPOSITORY : candidate;
-  const parts = normalized.split('/');
-  if (parts.length !== 2 || !parts.every((part) => /^[A-Za-z0-9_.-]+$/.test(part))) {
-    throw new Error('Invalid update repository. Use owner/name, for example saeedhub101/Saeed.');
-  }
-  return { owner: parts[0], repo: parts[1] };
-}
+let au = null, state = { state: 'idle', current: app.getVersion() }, emit = () => {};
 function set(s) { state = { ...state, ...s }; emit(state); }
 const first = (e) => String((e && e.message) || e).split('\n')[0].slice(0, 200);
 const notesText = (n) => (Array.isArray(n) ? n.map((x) => x.note || '').join('\n') : String(n || '')).replace(/<[^>]+>/g, '').trim().slice(0, 600);
@@ -23,11 +10,6 @@ const notesText = (n) => (Array.isArray(n) ? n.map((x) => x.note || '').join('\n
 function lazy() {
   if (au) return au;
   au = require('electron-updater').autoUpdater;
-  const configured = getSettings().updates && getSettings().updates.repo;
-  const target = repository(configured || DEFAULT_REPOSITORY);
-  // Explicitly set the GitHub feed. Do not rely on electron-builder's implicit publish URL,
-  // which can point at a stale repository after settings/repository changes.
-  au.setFeedURL({ provider: 'github', owner: target.owner, repo: target.repo });
   au.autoDownload = false;
   au.autoInstallOnAppQuit = false;
   au.logger = null;
@@ -39,7 +21,7 @@ function lazy() {
   return au;
 }
 
-function init(o = {}) { emit = typeof o.emit === 'function' ? o.emit : () => {}; getSettings = typeof o.getSettings === 'function' ? o.getSettings : () => ({}); }
+function init(o) { emit = o.emit; }
 const get = () => state;
 
 async function check() {
@@ -53,4 +35,4 @@ async function download() {
 }
 const install = () => lazy().quitAndInstall(true, true);
 
-module.exports = { init, get, check, download, install, _test: { repository, DEFAULT_REPOSITORY } };
+module.exports = { init, get, check, download, install };

@@ -163,6 +163,9 @@ const b64 = (t) => Buffer.from(String(t ?? ''), 'utf8').toString('base64');
 const decl = (v, t) => `$${v} = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(t)}'))`;
 const target = (a) => `${decl('title', a.window)}\n${decl('name', a.name)}\n${decl('aid', a.automationId)}\n$win = Find-Win $title\nCheck-Win $win\n`;
 
+const SENDKEYS_SPECIAL = /[+^%~(){}[\]]/g;
+// SendKeys treats + ^ % ~ ( ) { } [ ] as control characters; wrap each in braces so arbitrary typed text (dates, IDs, names) goes in literally.
+function escapeTypedText(s) { return String(s).replace(SENDKEYS_SPECIAL, (c) => `{${c}}`); }
 const uiaTools = {
   async ui_tree(a, ctx) {
     const depth = Math.max(1, Math.min(6, Number(a.depth) || 3));
@@ -186,10 +189,38 @@ $v = Get-Val $el
 @{ name = $el.Current.Name; type = $el.Current.ControlType.ProgrammaticName; value = $v; enabled = $el.Current.IsEnabled } | ConvertTo-Json -Compress`);
   },
   async ui_set_text(a, ctx) {
-    return uiaRun(ctx.settings, `${target(a)}${decl('text', a.text)}
+    // Many legacy and browser-hosted forms (old ASP.NET/VB6/MFC windows, Internet Explorer controls) report
+    // ValuePattern.SetValue as succeeding without it actually reaching the real field, so this always reads the
+    // value back afterward; if it does not match, it falls back to physically clicking the control and typing
+    // real keystrokes (SendKeys), which reaches almost anything because it is indistinguishable from a real
+    // keyboard - UI Automation is not involved in that path at all.
+    return uiaRun(ctx.settings, `${target(a)}${decl('raw', a.text)}${decl('keys', escapeTypedText(a.text))}
 $el = Find-Control $win $name $aid
-try { $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($text); 'Set.' }
-catch { $el.SetFocus(); Start-Sleep -Milliseconds 150; Set-Clipboard -Value $text; [System.Windows.Forms.SendKeys]::SendWait('^a'); [System.Windows.Forms.SendKeys]::SendWait('^v'); 'Typed through the keyboard.' }`);
+$ok = $false
+try {
+  $el.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern).SetValue($raw)
+  Start-Sleep -Milliseconds 150
+  if ((Get-Val $el) -eq $raw) { $ok = $true }
+} catch {}
+if (-not $ok) {
+  $r = $el.Current.BoundingRectangle
+  [void][W]::SetCursorPos([int]($r.X + $r.Width / 2), [int]($r.Y + $r.Height / 2))
+  Start-Sleep -Milliseconds 100
+  [W]::mouse_event(2,0,0,0,[UIntPtr]::Zero); Start-Sleep -Milliseconds 40; [W]::mouse_event(4,0,0,0,[UIntPtr]::Zero)
+  Start-Sleep -Milliseconds 150
+  try { $el.SetFocus() } catch {}
+  [System.Windows.Forms.SendKeys]::SendWait('^a')
+  Start-Sleep -Milliseconds 60
+  [System.Windows.Forms.SendKeys]::SendWait('{DEL}')
+  [System.Windows.Forms.SendKeys]::SendWait($keys)
+  Start-Sleep -Milliseconds 150
+  try { $ok = ((Get-Val $el) -eq $raw) } catch { $ok = $null }
+}
+$after = $null
+try { $after = Get-Val $el } catch {}
+if ($ok -eq $true) { "Set \`"$raw\`" (verified it is now in the field)." }
+elseif ($after) { "Typed \`"$raw\`" by clicking and typing, but the field now reads \`"$after\`" - check it visually, this program may not report its value through automation." }
+else { "Typed \`"$raw\`" by clicking and typing (could not read the field back to verify - check it visually)." }`);
   },
   async ui_select(a, ctx) {
     return uiaRun(ctx.settings, `${target(a)}${decl('opt', a.option)}

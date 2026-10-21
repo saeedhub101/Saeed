@@ -2,8 +2,6 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, dialog, nativeImage, screen, session, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { Readable, Transform } = require('stream');
-const { pipeline: streamPipeline } = require('stream/promises');
 const { DEFAULT_SETTINGS, merge } = require('./settings');
 const secrets = require('./secrets');
 const providers = require('./providers');
@@ -41,21 +39,7 @@ const alive = (w) => w && !w.isDestroyed();
 function loadCfg() {
   try { cfg = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(cfgFile(), 'utf8')) }; } catch { cfg = { ...DEFAULTS }; }
   cfg.settings = merge(DEFAULT_SETTINGS, cfg.settings);
-  // Upgrade only the model IDs that were shipped as Saeed defaults; preserve any user-selected model.
-  if (cfg.settings.llm.anthropic.model === 'claude-sonnet-5-5') cfg.settings.llm.anthropic.model = 'claude-sonnet-5';
-  if (cfg.settings.llm.openai.model === 'gpt-4o-mini') cfg.settings.llm.openai.model = 'gpt-6-astra';
-  if (!['low', 'medium', 'high', 'xhigh', 'max'].includes(cfg.settings.llm.reasoningEffort)) cfg.settings.llm.reasoningEffort = 'max';
-  // Migrate the old/incorrect owner so both Check for Updates and the add-on registry use the published repository.
-  const updateRepo = String(cfg.settings.updates.repo || '').trim().replace(/^https?:\/\/github\.com\//i, '').replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '');
-  if (!updateRepo || /^saeedhub\/Saeed$/i.test(updateRepo) || /^saeedhub101\/Saeed$/i.test(updateRepo)) cfg.settings.updates.repo = 'saeedhub101/Saeed';
-  if (String(cfg.settings.stt.provider) === 'local') cfg.settings.stt.provider = 'addon:whisper-local';
-  // Older installs defaulted to cloud Whisper. If no OpenAI credential exists, migrate that default
-  // to the bundled local recognizer instead of asking for an API key just to use the microphone.
-  if (cfg.settings.stt.provider === 'openai'
-    && !secrets.get('openai')
-    && /api\.openai\.com/i.test(String(cfg.settings.stt.openai.baseUrl || ''))) {
-    cfg.settings.stt.provider = 'addon:whisper-local';
-  }
+  if (String(cfg.settings.stt.provider) === 'local') cfg.settings.stt.provider = 'openai';   // moved to the Whisper add-on
   // Old "allowed folders" become allow rules in Permissions.
   const ag = cfg.settings.agent || {};
   for (const f of Array.isArray(ag.allowedFolders) ? ag.allowedFolders : []) {
@@ -74,23 +58,9 @@ function notifyAddons() {
   }, 150);
 }
 let saveTimer;
-function persistCfg() {
-  const target = cfgFile(), tmp = target + '.tmp';
-  fs.mkdirSync(path.dirname(target), { recursive: true });
-  try {
-    fs.writeFileSync(tmp, JSON.stringify(cfg, null, 2), 'utf8');
-    fs.renameSync(tmp, target);
-  } catch (error) {
-    try { fs.rmSync(tmp, { force: true }); } catch { /* cleanup is best effort */ }
-    throw error;
-  }
-}
 function saveCfg() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    try { persistCfg(); } catch (error) { console.error('[config] Could not save settings:', error); }
-  }, 300);
+  saveTimer = setTimeout(() => fs.writeFile(cfgFile(), JSON.stringify(cfg, null, 2), () => {}), 300);
 }
 function broadcast(except) {
   for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && w.webContents !== except) w.webContents.send('config:changed', cfg);
@@ -139,12 +109,10 @@ function setVisible(v) {
   else {
     avatarWin.webContents.send('service', 'pause');       // stops mic and audio in the window
     avatarWin.hide();
+    pipeline.cancel();                                     // stops the brain unless the chat is open
     realtime.stop();
-    if (!chatOpen()) {
-      pipeline.cancel();                                   // no chat remains to own an active brain turn
-      addons.stopAll();                                    // release child add-ons only when no UI needs them
-      bus.avatar({ type: 'cancel' });
-    }
+    addons.stopAll();                                      // frees the memory of every add-on process
+    if (!chatOpen()) bus.avatar({ type: 'cancel' });
   }
   buildTray();
 }
@@ -158,7 +126,7 @@ function devKeys(w) {
 function openStudio(tab = 'bones') {
   if (alive(studioWin)) { studioWin.show(); studioWin.focus(); studioWin.webContents.send('studio:tab', tab); return; }
   studioWin = new BrowserWindow({
-    width: 1320, height: 840, minWidth: 1000, minHeight: 640, backgroundColor: '#14171c', title: 'Saeed Studio', autoHideMenuBar: true,
+    width: 1320, height: 840, minWidth: 1000, minHeight: 640, backgroundColor: '#14171c', title: 'Avatar Studio', autoHideMenuBar: true,
     webPreferences: { preload, contextIsolation: true, sandbox: true },
   });
   studioWin.removeMenu();
@@ -171,7 +139,7 @@ const SIZES = {
   chat: { width: 460, height: 660, title: 'Chat with Saeed' },
   addons: { width: 920, height: 720, title: 'Saeed add-ons' },
   permissions: { width: 980, height: 820, title: 'Saeed permissions' },
-  update: { width: 560, height: 360, minWidth: 500, minHeight: 300, title: 'Saeed update', resizable: true, minimizable: false, maximizable: false, alwaysOnTop: true },
+  update: { width: 430, height: 270, title: 'Saeed update', resizable: false, minimizable: false, maximizable: false, alwaysOnTop: true },
 };
 function openWin(kind) {
   if (!SIZES[kind]) return;
@@ -182,11 +150,7 @@ function openWin(kind) {
   devKeys(w);
   w.on('closed', () => {
     wins[kind] = null;
-    if (kind === 'chat' && !cfg.visible) {
-      pipeline.cancel();                                     // hidden + chat closed = brain stopped
-      realtime.stop();
-      addons.stopAll();
-    }
+    if (kind === 'chat' && !cfg.visible) pipeline.cancel();   // hidden + chat closed = brain stopped
   });
   wins[kind] = w;
 }
@@ -381,45 +345,6 @@ ipcMain.handle('addons:toggle', (_e, id, on) => { setSetting((s) => { s.addons.e
 ipcMain.handle('addons:remove', (_e, id) => { addons.remove(id); return true; });
 ipcMain.handle('addons:stop', (_e, id) => { addons.stop(id); return true; });
 ipcMain.handle('addons:save-settings', (_e, id, values) => { setSetting((s) => { s.addons.settings[id] = values; }); return true; });
-ipcMain.handle('addons:download-model', async (_e, choice) => {
-  const models = {
-    'qwen3-0.6b': { file: 'Qwen3-0.6B-Q4_0.gguf', url: 'https://huggingface.co/ggml-org/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_0.gguf' },
-    'qwen3-4b': { file: 'Qwen3-4B-Q4_K_M.gguf', url: 'https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf' },
-  };
-  const model = models[String(choice)];
-  if (!model) return { ok: false, error: 'Choose a supported model first.' };
-  const dir = path.join(app.getPath('userData'), 'addon-data', 'llm-llamacpp', 'models');
-  await fs.promises.mkdir(dir, { recursive: true });
-  const target = path.join(dir, model.file);
-  if (fs.existsSync(target) && fs.statSync(target).size > 0) {
-    setSetting((s) => { s.addons.settings['llm-llamacpp'] = { ...(s.addons.settings['llm-llamacpp'] || {}), modelChoice: choice, modelPath: target, modelUrl: '' }; });
-    return { ok: true, path: target, alreadyPresent: true };
-  }
-  const tmp = target + '.part';
-  try {
-    const res = await fetch(model.url, { redirect: 'follow' });
-    if (!res.ok || !res.body) throw new Error('Model download failed: HTTP ' + res.status);
-    const total = Number(res.headers.get('content-length')) || 0;
-    let transferred = 0, last = 0;
-    const progress = new Transform({ transform(chunk, _enc, cb) {
-      transferred += chunk.length;
-      if (Date.now() - last > 500) {
-        last = Date.now();
-        sendTo('addons', 'addons:progress', { id: 'local-brain-model', transferred, total, bps: 0, eta: 0 });
-      }
-      cb(null, chunk);
-    }});
-    await streamPipeline(Readable.fromWeb(res.body), progress, fs.createWriteStream(tmp));
-    if (!fs.existsSync(tmp) || fs.statSync(tmp).size < 1024 * 1024) throw new Error('Downloaded model file is incomplete.');
-    await fs.promises.rename(tmp, target);
-    setSetting((s) => { s.addons.settings['llm-llamacpp'] = { ...(s.addons.settings['llm-llamacpp'] || {}), modelChoice: choice, modelPath: target, modelUrl: '' }; });
-    sendTo('addons', 'addons:progress', { id: 'local-brain-model', transferred: fs.statSync(target).size, total: fs.statSync(target).size, bps: 0, eta: 0 });
-    return { ok: true, path: target };
-  } catch (e) {
-    try { await fs.promises.rm(tmp, { force: true }); } catch {}
-    return { ok: false, error: e.message };
-  }
-});
 ipcMain.handle('addons:registry', async () => { try { const r = await addons.registry(); return { ok: true, list: r.list, errors: r.errors }; } catch (e) { return { ok: false, error: e.message }; } });
 ipcMain.handle('addons:set-sources', (_e, list) => { setSetting((s) => { s.addons.sources = (list || []).filter((x) => x && /^https?:\/\//i.test(String(x.url || '').trim())).map((x) => ({ name: String(x.name || '').slice(0, 40), url: String(x.url).trim() })); }); return true; });
 ipcMain.handle('addons:install-url', async (_e, url) => {
@@ -479,6 +404,7 @@ ipcMain.on('update:action', (_e, a) => {
 ipcMain.handle('sys:metrics', () => ({
   processes: app.getAppMetrics().map((m) => ({ pid: m.pid, type: m.type, memMB: Math.round((m.memory.workingSetSize || 0) / 1024), cpu: +m.cpu.percentCPUUsage.toFixed(1) })),
   addons: addons.running(),
+  addonDetail: addons.runningDetail(),
   windows: BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed()).map((w) => `${w.getTitle() || 'window'}${w.isVisible() ? '' : ' (hidden)'}`),
 }));
 
@@ -490,7 +416,7 @@ ipcMain.handle('memory:list', () => memory.listFacts());
 ipcMain.handle('memory:add', (_e, t) => memory.addFact(t));
 ipcMain.handle('memory:remove', (_e, i) => { memory.removeFactAt(i); return true; });
 ipcMain.handle('skills:list', () => skills.list());
-ipcMain.handle('skills:remove', (_e, i) => skills.removeAt(i));
+ipcMain.handle('skills:remove', (_e, i) => { skills.removeAt(i); return true; });
 ipcMain.handle('test:tts', async (_e, text) => {
   try { const a = await providers.synthesize(cfg.settings, text); return { ok: true, mime: a.mime, bytes: a.bytes }; }
   catch (e) { return { ok: false, error: e.message }; }
@@ -512,12 +438,6 @@ ipcMain.on('prayer:test', () => triggerAdhan('Dhuhr'));
 /* ---------------- Lifecycle ---------------- */
 app.on('second-instance', () => setVisible(true));
 app.on('window-all-closed', () => { /* stay alive in the tray */ });
-app.on('before-quit', () => {
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  try { persistCfg(); } catch (error) { console.error('[config] Could not flush settings before quit:', error); }
-  try { brain.flushHistory(); } catch (error) { console.error('[history] Could not flush conversation before quit:', error); }
-});
 app.on('will-quit', () => globalShortcut.unregisterAll());
 app.whenReady().then(() => {
   loadCfg();
@@ -534,7 +454,7 @@ app.whenReady().then(() => {
     onChange: notifyAddons, onDesktop: desktopPing,
   });
   let silent = false;
-  updater.init({ getSettings: () => cfg.settings, emit: (st) => {
+  updater.init({ emit: (st) => {
     sendTo('update', 'update:state', st);
     if (silent && st.state === 'available') { silent = false; openWin('update'); }
     if (['none', 'error', 'dev'].includes(st.state)) silent = false;

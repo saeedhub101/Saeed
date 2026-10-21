@@ -89,17 +89,10 @@ const POSTURES = [
   ['stand', /^(?:stand up|stand|wake up|قف|انهض|استيقظ|قم)$/],
 ];
 
-const GREETING_RE = /^(?:hello|hi|hey|hiya|hello there|hey there|good morning|good afternoon|good evening|how are you|how are you doing|whats up|سلام|مرحبا|اهلا|اهلين|السلام عليكم|وعليكم السلام|صباح الخير|مساء الخير|كيف حالك|كيفك|شلونك)$/;
-function isGreeting(text) { return GREETING_RE.test(norm(text)); }
-
 /** Returns { reply, intent? } for simple commands, or null to let the brain answer. */
 async function route(text, settings) {
   const ar = isArabic(text);
   const t = norm(text);
-  if (isGreeting(text)) {
-    if (ar) return { reply: /^(?:السلام عليكم|سلام)$/.test(t) ? 'وعليكم السلام! أنا جاهز لمساعدتك. ماذا تريد أن نفعل؟' : 'أهلاً! أنا جاهز لمساعدتك. ماذا تريد أن نفعل؟', intent: 'greet' };
-    return { reply: 'Hello! I am here and ready to help. What would you like to do?', intent: 'greet' };
-  }
   if (TIME_RE.test(t)) return { reply: timeText(ar) };
   if (t.length < 30) for (const [intent, re] of POSTURES) if (re.test(t)) return { reply: ar ? 'حاضر.' : 'Okay.', intent };
   const m = OPEN_RE.exec(t);
@@ -123,4 +116,4 @@ async function route(text, settings) {
   return null;
 }
 
-module.exports = { route, openItem, timeText, isArabic, norm, isGreeting };
+module.exports = { route, openItem, timeText, isArabic, norm };

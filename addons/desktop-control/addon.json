@@ -1,7 +1,7 @@
 {
   "id": "desktop-control",
   "name": "Screen control",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "Saeed",
   "description": "Lets Saeed see the screen and use the mouse and keyboard to work inside other programs, such as a company system. Windows only. It asks your permission for each task, shows a red STOP bar, and Ctrl+Alt+X stops it at once. Also reads and fills the controls of Windows programs directly (UI Automation) without screenshots.",
   "main": "index.js",
@@ -172,7 +172,7 @@
       "perm": [
         "desktop.control"
       ],
-      "description": "Put text into a field of a program window directly (by name or automationId), without clicking and typing.",
+      "description": "Type into a field of a program window directly (by name or automationId). Reads the value back afterward and, if it did not actually land (common on legacy or browser-hosted/ASP.NET forms), automatically falls back to physically clicking the field and typing real keystrokes instead - tells you plainly either way whether it is verified.",
       "schema": {
         "type": "object",
         "properties": {

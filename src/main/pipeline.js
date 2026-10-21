@@ -9,6 +9,20 @@ const perms = require('./permissions');
 let bus, getSettings, canSpeak, isActive, job = null;
 function init(o) { ({ bus, getSettings, canSpeak, isActive } = o); }
 
+/* ---------- mood signals: how the turn actually went, read from what was said, not guessed ---------- */
+const THANK_RE = /\b(thanks?|thank you|thx|cheers)\b|شكر|يعطيك العافيه|تسلم/i;
+const POS_RE = /\b(done|great|perfect|excellent|all set|sounds good|no problem|happy to|sure thing)\b|تم\b|ممتاز|رائع|نجح|بنجاح|تمام|جاهز/i;
+const NEG_RE = /\b(sorry|unfortunately|i (?:could not|couldn't|can't|cannot|wasn't able)|failed|not able to|unable to)\b|عذراً|آسف|لم أستطع|تعذر|فشل|للأسف/i;
+const SURPRISE_RE = /\b(wow|surprising(?:ly)?|unexpected(?:ly)?|interesting(?:ly)?)\b|مفاجئ|غريب|لافت/i;
+// moods: emits as many signals as genuinely apply to one turn, each a small nudge - never a hard override.
+function moodSignals(userText, replyText) {
+  const out = [];
+  if (THANK_RE.test(userText)) out.push('thank');
+  if (SURPRISE_RE.test(replyText)) out.push('surprise');
+  if (NEG_RE.test(replyText)) out.push('failure'); else if (POS_RE.test(replyText)) out.push('success');
+  return out;
+}
+
 function cancel() {
   if (job) { job.ctrl.abort(); job = null; }
   perms.endTask();
@@ -85,21 +99,28 @@ async function handleText(text, source = 'chat', images = []) {
   const speech = startSpeech(ctrl.signal, s);
   try {
     let reply;
-    const local = !images.length && (s.commands.local || actions.isGreeting(text)) ? await actions.route(text, s) : null;
+    const local = s.commands.local && !images.length ? await actions.route(text, s) : null;
     if (local) {
       reply = local.reply;
       if (local.intent) bus.avatar({ type: 'intent', name: local.intent });
       brain.remember(text, reply);
       speech.push(reply);
     } else {
+      let anyOk = false, anyFail = false;
       reply = (await brain.ask(text, {
         signal: ctrl.signal, settings: s, images,
         onIntent: (n) => bus.avatar({ type: 'intent', name: n }),
         onTool: (t) => bus.chat({ type: 'tool', text: `${t.name} ${JSON.stringify(t.args).slice(0, 140)}` }),
+        onToolResult: (_name, ok) => { if (ok) anyOk = true; else anyFail = true; },
+        onPlan: (p) => bus.chat({ type: 'plan', plan: p }),
         onText: (d) => { if (ctrl.signal.aborted) return; speech.push(d); bus.chat({ type: 'delta', text: d }); },
       })).text;
+      // A real action (not just looking something up) either worked or it didn't - that is worth more than word-guessing.
+      if (anyFail) bus.avatar({ type: 'mood', notice: 'failure' });
+      else if (anyOk) bus.avatar({ type: 'mood', notice: 'success' });
     }
     if (ctrl.signal.aborted) return;
+    for (const notice of moodSignals(text, reply)) bus.avatar({ type: 'mood', notice });
     bus.chat({ type: 'message', role: 'assistant', text: reply });
     bus.chat({ type: 'state', text: '' });
     await speech.end();

@@ -29,3 +29,18 @@ canvas:active { cursor: grabbing; }
   background: inherit; transform: translateX(-50%) rotate(45deg); border-radius: 2px;
 }
 @media (prefers-reduced-motion: reduce) { #mic { transition: none; } }
+/* A small, quiet dot showing Saeed's current mood - color only, never interrupts clicking or dragging. */
+#mood {
+  position: fixed; top: 10px; right: 12px; width: 9px; height: 9px; border-radius: 50%;
+  background: #8fb4ff; opacity: .75; pointer-events: none;
+  box-shadow: 0 0 5px 1px currentColor; color: #8fb4ff;
+  transition: background-color .8s ease, color .8s ease;
+}
+#mood.mood-cheerful { background: #ffd24a; color: #ffd24a; }
+#mood.mood-pleased { background: #7fe0a0; color: #7fe0a0; }
+#mood.mood-thoughtful { background: #8fb4ff; color: #8fb4ff; }
+#mood.mood-mischievous { background: #ff8fd0; color: #ff8fd0; }
+#mood.mood-puzzled { background: #c9a0ff; color: #c9a0ff; }
+#mood.mood-sad { background: #7a8aa0; color: #7a8aa0; }
+#mood.mood-sleepy { background: #52627d; color: #52627d; opacity: .55; }
+#mood.mood-curious { background: #5ad1d1; color: #5ad1d1; }

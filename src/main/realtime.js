@@ -5,7 +5,10 @@ const secrets = require('./secrets');
 const brain = require('./brain');
 
 let ws = null, bus = null, rate = 24000, lastUser = '', ready = false, ctx = null;
-const toolPolicy = { confirmedAction: null };
+// One task's worth of state, reset each turn (response.done): what was done, so it can be remembered as a
+// skill the same way the step-by-step chat/voice path does, and the plan the model is following, if any.
+let trace = [], calledLearn = false, turnText = '', plan = { goal: '', steps: [] };
+function resetTurn() { trace = []; calledLearn = false; turnText = ''; plan = { goal: '', steps: [] }; }
 
 const send = (o) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); };
 
@@ -28,11 +31,15 @@ function sessionUpdate(r, p, s) {
 async function runTool(ev) {
   let args = {};
   try { args = JSON.parse(ev.arguments || '{}'); } catch { /* empty */ }
+  if (ev.name === 'learn_skill' || ev.name === 'update_skill') calledLearn = true;
+  brain.traceCall(trace, ev.name, args);
   const s = ctx.getSettings();
   const out = await brain.execTool(s, ev.name, args, {
-    policy: toolPolicy,
     onIntent: (n) => bus.avatar({ type: 'intent', name: n }),
     onTool: (t) => bus.chat({ type: 'tool', text: `${t.name} ${JSON.stringify(t.args).slice(0, 140)}` }),
+    onToolResult: (_name, ok) => bus.avatar({ type: 'mood', notice: ok ? 'success' : 'failure' }),
+    onPlan: (p) => bus.chat({ type: 'plan', plan: p }),
+    plan,
   });
   send({ type: 'conversation.item.create', item: { type: 'function_call_output', call_id: ev.call_id, output: typeof out === 'string' ? out : String((out && out.text) || '') } });
   send({ type: 'response.create' });
@@ -50,9 +57,8 @@ async function onEvent(ev) {
       bus.avatar({ type: 'rt-interrupt' }); bus.chat({ type: 'state', text: 'listening…' });
       break;
     case 'conversation.item.input_audio_transcription.completed':
-      toolPolicy.confirmedAction = null;
       lastUser = ev.transcript || '';
-      if (lastUser.trim()) bus.chat({ type: 'message', role: 'user', text: lastUser.trim(), source: 'voice' });
+      if (lastUser.trim()) { turnText = lastUser.trim(); bus.chat({ type: 'message', role: 'user', text: turnText, source: 'voice' }); }
       break;
     case 'response.output_audio_transcript.done': case 'response.audio_transcript.done':
       if (ev.transcript) {
@@ -63,7 +69,11 @@ async function onEvent(ev) {
       }
       break;
     case 'response.function_call_arguments.done': await runTool(ev); break;
-    case 'response.done': bus.avatar({ type: 'rt-done' }); break;
+    case 'response.done':
+      bus.avatar({ type: 'rt-done' });
+      brain.autoCapture(turnText || 'Voice task', trace, calledLearn);
+      resetTurn();
+      break;
     case 'error': bus.chat({ type: 'error', text: 'Realtime: ' + ((ev.error && ev.error.message) || 'error') }); break;
     default: break;
   }
@@ -71,7 +81,8 @@ async function onEvent(ev) {
 
 async function start(o) {
   stop();
-  ctx = o; bus = o.bus; ready = false; lastUser = ''; toolPolicy.confirmedAction = null;
+  ctx = o; bus = o.bus; ready = false; lastUser = '';
+  resetTurn();
   const s = o.getSettings(), r = s.realtime;
   if (r.provider === 'off') throw new Error('Realtime is off. Choose a provider in Settings → Live conversation.');
   const p = r.provider === 'custom' ? r.custom : r.openai;
@@ -106,7 +117,7 @@ async function start(o) {
 
 function audio(buf) { send({ type: 'input_audio_buffer.append', audio: Buffer.from(buf).toString('base64') }); }
 function interrupt() { send({ type: 'response.cancel' }); }
-function stop() { toolPolicy.confirmedAction = null; if (ws) { const w = ws; ws = null; try { w.close(); } catch { /* closed */ } } }
+function stop() { if (ws) { const w = ws; ws = null; try { w.close(); } catch { /* closed */ } } }
 const active = () => !!ws;
 
 module.exports = { start, stop, audio, interrupt, active };

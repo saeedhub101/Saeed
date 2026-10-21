@@ -10,17 +10,29 @@ function add(role, text, voice) {
 }
 for (const m of await api.chatHistory()) add(m.role, m.text);
 
-let live = null;   // the assistant message that is being written
+let live = null;    // the assistant message that is being written
+let planEl = null;  // the current task's plan, shown as a live checklist and updated in place
+function showPlan(plan) {
+  if (!planEl) { planEl = h('div', { class: 'msg plan' }); list.append(planEl); }
+  planEl.replaceChildren(
+    plan.goal ? h('div', { class: 'plan-goal', dir: 'auto' }, plan.goal) : null,
+    ...plan.steps.map((s, i) => h('div', { class: 'plan-step' + (s.done ? ' done' : ''), dir: 'auto' },
+      h('span', { class: 'plan-mark' }, s.done ? '✓' : String(i + 1)),
+      h('span', {}, s.text),
+      s.note ? h('span', { class: 'plan-note' }, ' — ' + s.note) : null)));
+  list.scrollTop = list.scrollHeight;
+}
 api.onChatEvent((ev) => {
   if (ev.type === 'delta') {
     if (!live) { live = h('div', { class: 'msg assistant', dir: 'auto' }, ''); list.append(live); }
     live.textContent += ev.text; list.scrollTop = list.scrollHeight;
   } else if (ev.type === 'message') {
     if (ev.role === 'assistant' && live) { live.textContent = ev.text; live = null; }
-    else { live = null; add(ev.role, ev.text, ev.source === 'voice' && ev.role === 'user'); }
+    else { live = null; if (ev.role === 'user') planEl = null; add(ev.role, ev.text, ev.source === 'voice' && ev.role === 'user'); }
   } else if (ev.type === 'state') stateEl.textContent = ev.text || '';
   else if (ev.type === 'error') { live = null; add('error', ev.text); }
   else if (ev.type === 'tool') add('tool', '⚙ ' + ev.text);
+  else if (ev.type === 'plan') showPlan(ev.plan);
 });
 
 let images = [];

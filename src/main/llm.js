@@ -11,21 +11,7 @@ const oContent = (m) => (m.images && m.images.length
   ? [...m.images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mime};base64,${i.data}` } })), { type: 'text', text: m.text }] : m.text);
 const rText = (r) => (typeof r === 'string' ? r : String((r && r.text) || ''));
 const rImage = (r) => (r && typeof r === 'object' && r.image ? r.image : null);
-function parseToolArguments(raw) {
-  const value = JSON.parse(String(raw || '{}'));
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Tool arguments must be a JSON object.');
-  return value;
-}
 const maxSteps = (s) => (s.agent && s.agent.maxSteps) || 25;
-const requestOptions = (settings, provider, model) => {
-  const id = String(model || '');
-  if (provider !== 'openai' || !/^gpt-(?:5|6)(?:[.-]|$)/i.test(id)) return {};
-  const allowed = /^gpt-6(?:[.-]|$)/i.test(id)
-    ? ['low', 'medium', 'high', 'xhigh', 'max']
-    : ['low', 'medium', 'high', 'xhigh'];
-  const effort = settings.llm.reasoningEffort;
-  return { reasoning_effort: allowed.includes(effort) ? effort : 'high' };
-};
 
 async function check(r, label) {
   if (r.ok) return r;
@@ -51,28 +37,6 @@ async function* sse(res) {
   }
 }
 
-// Remember failed exact calls for this turn so a model cannot repeat a broken operation indefinitely.
-function createToolRunner(execTool, signal) {
-  const failed = new Set();
-  return async (name, args) => {
-    const key = String(name) + ':' + JSON.stringify(args || {});
-    if (failed.has(key)) return 'This exact tool call already failed earlier in this task and was not repeated. Use the error to choose another tool, correct the arguments, or explain the blocker.';
-    try {
-      const result = await execTool(name, args || {});
-      const summary = rText(result);
-      if ((result && typeof result === 'object' && (result.ok === false || result.success === false || result.error))
-        || /\b(?:error|denied|failed|failure|could not|couldn.t|unknown tool|tool call rejected|invalid|not found|does not exist|permission denied)\b/i.test(summary)
-        || /\bHTTP [45]\d\d\b/i.test(summary)
-        || /لم يتم العثور|لم أتمكن|تعذر|مرفوض|غير موجود|لا يوجد|لم ينجح|فشل|خطأ|رفض/i.test(summary)) failed.add(key);
-      return result;
-    } catch (error) {
-      if (signal && signal.aborted) throw error;
-      failed.add(key);
-      return 'Tool execution error: ' + String(error && error.message || error) + '. Diagnose this result and try a different permitted approach if possible.';
-    }
-  };
-}
-
 /* ---------- Claude ---------- */
 async function anthropicCall(key, body, signal, onText) {
   const res = await check(await fetch('https://api.anthropic.com/v1/messages', {
@@ -95,15 +59,7 @@ async function anthropicCall(key, body, signal, onText) {
       else if (ev.delta.type === 'input_json_delta') b._json += ev.delta.partial_json;
     } else if (ev.type === 'content_block_stop') {
       const b = content[ev.index];
-      if (b && b.type === 'tool_use') {
-        try { b.input = b._json ? parseToolArguments(b._json) : {}; }
-        catch {
-          b.input = {};
-          // Keep the marker local-only; it is not serialized into the provider's assistant message.
-          Object.defineProperty(b, '_invalidInput', { value: true, enumerable: false });
-        }
-        delete b._json;
-      }
+      if (b && b.type === 'tool_use') { try { b.input = b._json ? JSON.parse(b._json) : {}; } catch { b.input = {}; } delete b._json; }
     } else if (ev.type === 'message_delta' && ev.delta && ev.delta.stop_reason) stop = ev.delta.stop_reason;
     else if (ev.type === 'error') throw new Error('Claude: ' + ((ev.error && ev.error.message) || 'stream error'));
   }
@@ -117,33 +73,25 @@ async function anthropicAgent(s, { system, history, tools, execTool, signal, onT
   const msgs = history.map((m) => ({ role: m.role, content: aContent(m) }));
   const toolDefs = tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema }));
   let all = '';
-  const runTool = createToolRunner(execTool, signal);
   for (let i = 0; i < maxSteps(s); i++) {
     const j = await anthropicCall(key, { model: s.llm.anthropic.model, max_tokens: 4096, system, messages: msgs, tools: toolDefs }, signal, onText);
     msgs.push({ role: 'assistant', content: j.content });
     const text = j.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
     if (text) all += (all ? ' ' : '') + text;
     const uses = j.content.filter((b) => b.type === 'tool_use');
-    if (j.stop_reason !== 'tool_use' || !uses.length) return text.trim() || all.trim();
+    if (j.stop_reason !== 'tool_use' || !uses.length) return all.trim();
     const results = [];
     for (const u of uses) {
-      const r = u._invalidInput
-        ? 'Tool was not executed because the model returned invalid JSON arguments. Retry with valid JSON matching the tool schema.'
-        : await runTool(u.name, u.input || {});
+      const r = await execTool(u.name, u.input || {});
       const img = rImage(r);
       results.push({
         type: 'tool_result', tool_use_id: u.id,
-        content: img ? [{ type: 'text', text: rText(r) || 'Image' }, { type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } }] : rText(r) || 'Tool returned no content. Verify the state before assuming success.',
+        content: img ? [{ type: 'text', text: rText(r) || 'Image' }, { type: 'image', source: { type: 'base64', media_type: img.mime, data: img.data } }] : rText(r) || 'Done.',
       });
     }
     msgs.push({ role: 'user', content: results });
   }
-  // The last permitted tool round may have returned useful evidence without leaving a
-  // model turn to interpret it. Make a final tools-disabled synthesis call.
-  const finalSystem = system + '\n\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
-  const final = await anthropicCall(key, { model: s.llm.anthropic.model, max_tokens: 1800, system: finalSystem, messages: msgs, tools: [] }, signal, onText);
-  const finalText = (final.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
-  return finalText || 'I could not produce a verified final summary.';
+  return (all + ' I stopped because the task needed too many steps.').trim();
 }
 
 /* ---------- OpenAI-compatible ---------- */
@@ -184,93 +132,45 @@ async function openaiAgent(s, { system, history, tools, execTool, signal, onText
   const msgs = [{ role: 'system', content: system }, ...history.map((m) => ({ role: m.role, content: oContent(m) }))];
   const toolDefs = tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.schema } }));
   const key = secrets.get(name);
-  if (!key && /api\.openai\.com/i.test(String(p.baseUrl || ''))) {
-    throw new Error('No OpenAI API key is configured. Basic greetings work offline; for general AI conversation, add a key in Settings → Brain or select a configured local brain.');
-  }
   let all = '';
-  const runTool = createToolRunner(execTool, signal);
   for (let i = 0; i < maxSteps(s); i++) {
-    const m = await openaiCall(p, key, { model: p.model, ...requestOptions(s, name, p.model), messages: msgs, tools: toolDefs, tool_choice: 'auto' }, signal, onText);
+    const m = await openaiCall(p, key, { model: p.model, messages: msgs, tools: toolDefs, tool_choice: 'auto' }, signal, onText);
     msgs.push({ ...m, content: m.content || null });
     if (m.content) all += (all ? ' ' : '') + m.content;
-    if (!m.tool_calls || !m.tool_calls.length) return String(m.content || '').trim() || all.trim();
+    if (!m.tool_calls || !m.tool_calls.length) return all.trim();
     const images = [];
     for (const tc of m.tool_calls) {
-      let args;
-      try {
-        args = parseToolArguments(tc.function.arguments);
-      } catch {
-        // Never execute a tool with empty or fabricated arguments after a model JSON error.
-        msgs.push({ role: 'tool', tool_call_id: tc.id, content: 'Tool was not executed because the model returned invalid JSON arguments. Retry with valid JSON matching the tool schema.' });
-        continue;
-      }
-      const r = await runTool(tc.function.name, args);
-      msgs.push({ role: 'tool', tool_call_id: tc.id, content: rText(r) || 'Tool returned no content. Verify the state before assuming success.' });
+      let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch { /* ignore */ }
+      const r = await execTool(tc.function.name, args);
+      msgs.push({ role: 'tool', tool_call_id: tc.id, content: rText(r) || 'Done.' });
       const img = rImage(r);
       if (img) images.push({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.data}` } });
     }
     if (images.length) msgs.push({ role: 'user', content: [{ type: 'text', text: '(image returned by the tool)' }, ...images] });
   }
-  const finalSystem = system + '\n\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
-  const finalMessages = msgs.slice();
-  if (finalMessages[0] && finalMessages[0].role === 'system') finalMessages[0] = { ...finalMessages[0], content: finalSystem };
-  else finalMessages.unshift({ role: 'system', content: finalSystem });
-  const final = await openaiCall(p, key, { model: p.model, ...requestOptions(s, name, p.model), messages: finalMessages, tools: [], tool_choice: 'none' }, signal, onText);
-  return String(final.content || '').trim() || 'I could not produce a verified final summary.';
+  return (all + ' I stopped because the task needed too many steps.').trim();
 }
 
 /* ---------- brains that come from add-ons (for example a local Qwen / Llama) ---------- */
 // The add-on implements llm.complete({ system, messages, tools }) -> { text, toolCalls: [{ id, name, args }] }.
-function shouldAutoSearch(text) {
-  const raw = String(text || '').trim();
-  if (!raw || raw.length < 5) return false;
-  const normalized = raw.toLowerCase()
-    .replace(/[\u064B-\u065F\u0670]/g, '')
-    .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي');
-  // Requests that clearly ask Saeed to operate on the user's PC should stay local.
-  if (/\b(open|launch|run|create|write|save|delete|rename|move|copy|translate|summari[sz]e|calculate|draw|click|press|install)\b/i.test(normalized)
-    || /افتح|شغل|نفذ|انشئ|اكتب|احفظ|احذف|اعد تسميه|انقل|انسخ|ترجم|لخص|احسب|ارسم|اضغط|انقر|ثبت|سطب/.test(normalized)) return false;
-  const currentOrResearch = /\b(current time|what time|what is|what are|what does|weather|forecast|latest news|news about|price of|exchange rate|capital of|where is|where are|who is|who are|when did|when was|why is|why are|why does|how does|how is|how are|how many|how much|how far|population of|located|meaning of|definition of|define|explain|tell me about|information about|latest|today|right now)\b/i.test(normalized)
-    || /اين|وين|من هو|من هي|ما هو|ما هي|متى|لماذا|كيف|كم|ما معنى|معنى|اين تقع|اين يوجد|عاصمه|الطقس|درجه الحراره|كم الساعه|اخر اخبار|احدث|سعر|اسعار|عدد سكان|معلومات عن|حدثني عن/.test(normalized);
-  return currentOrResearch;
-}
-
 async function addonAgent(s, { system, history, tools, execTool, signal, onText }) {
   const addons = require('./addons');
   const id = s.llm.provider;
   const msgs = history.map((m) => ({ role: m.role, text: m.text, images: m.images }));
   const defs = tools.map((t) => ({ name: t.name, description: t.description, schema: t.schema }));
   let all = '';
-  const runTool = createToolRunner(execTool, signal);
-  let agentSystem = system;
-  const latestUser = [...history].reverse().find((m) => m && m.role === 'user');
-  const searchTool = defs.find((t) => t.name === 'web_search');
-  // Give small local models real evidence before asking them to answer straightforward factual questions.
-  // This is intentionally limited to information requests; app/file actions remain tool-selected.
-  if (latestUser && searchTool && shouldAutoSearch(latestUser.text)) {
-    const query = String(latestUser.text || '').trim();
-    const result = await runTool('web_search', { query, count: 6 });
-    msgs.push({ role: 'tool', toolCallId: 'automatic-web-search', name: 'web_search',
-      text: 'Automatic preliminary web search for the current user question (' + query + '):\n' + (rText(result) || 'Search returned no readable results.') });
-    agentSystem += '\n\nAn automatic preliminary web search was already performed for this factual question. Inspect its result before answering. If it contains useful results, use web_fetch to read a relevant source when needed. If results are empty, irrelevant, or an error, try a meaningfully different search query before giving up. Do not repeat the identical query. Distinguish verified facts from uncertainty.';
-  }
   for (let i = 0; i < maxSteps(s); i++) {
-    const r = await addons.callProvider('llm', id, { system: agentSystem, messages: msgs, tools: defs }, signal, onText);
+    const r = await addons.callProvider('llm', id, { system, messages: msgs, tools: defs }, signal, onText);
     if (r.text) all += (all ? ' ' : '') + r.text;
-    if (!r.toolCalls || !r.toolCalls.length) return String(r.text || '').trim() || all.trim();
-    // Keep a model turn in local chat history so the following tool result is not a consecutive user turn.
-    // This marker is internal context only; it is never added to the visible answer.
-    msgs.push({ role: 'assistant', text: r.text || '[Requested tool: ' + r.toolCalls.map((tc) => tc.name).join(', ') + ']', toolCalls: r.toolCalls });
+    if (!r.toolCalls || !r.toolCalls.length) return all.trim();
+    msgs.push({ role: 'assistant', text: r.text || '', toolCalls: r.toolCalls });
     for (const tc of r.toolCalls) {
-      let out;
-      out = await runTool(tc.name, tc.args || {});
-      msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.name, text: rText(out) || 'Tool returned no content. Verify the state before assuming success.' });
+      const out = await execTool(tc.name, tc.args || {});
+      msgs.push({ role: 'tool', toolCallId: tc.id, name: tc.name, text: rText(out) });
     }
   }
-  const finalSystem = system + '\n\nExecution limit reached. Do not request or claim any more tool calls. Summarize only verified outcomes, clearly identify unfinished steps, and never claim the task is complete if the evidence does not prove it.';
-  const final = await addons.callProvider('llm', id, { system: agentSystem + '\n\n' + finalSystem, messages: msgs, tools: [] }, signal, onText);
-  return String(final.text || '').trim() || 'I could not produce a verified final summary.';
+  return (all + ' I stopped because the task needed too many steps.').trim();
 }
 
 const runAgent = (s, opts) => (s.llm.provider.startsWith('addon:') ? addonAgent(s, opts) : s.llm.provider === 'anthropic' ? anthropicAgent(s, opts) : openaiAgent(s, opts));
-module.exports = { runAgent, _test: { createToolRunner, parseToolArguments, requestOptions, shouldAutoSearch, addonAgent } };
+module.exports = { runAgent };

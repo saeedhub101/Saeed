@@ -83,26 +83,14 @@ function llmSection() {
   const out = h('div', { class: 'out muted' });
   const kids = [row('Provider', SEL(c, 'provider', [['anthropic', 'Claude (Anthropic)'], ['openai', 'OpenAI'], ['custom', 'OpenAI-compatible (Ollama, Groq, OpenRouter…)'], ...addonOpts('llm', S.llm.provider)], true))];
   if (c.provider.startsWith('addon:')) {
-    kids.push(note("Local brain is a separate download, not part of Saeed's installer. Install it from Add-ons, then the GGUF model downloads on first use into Saeed's user-data folder. It runs locally without a cloud API key. Larger models usually understand Arabic and choose tools better but need more RAM. Cloud choices (OpenAI, Claude, or an OpenAI-compatible service such as Groq/OpenRouter/Ollama) remain optional alternatives."), openAddons());
+    kids.push(note('This brain runs inside an add-on (for example a local Qwen or Llama model). Its options are in the Add-ons window. Small local models are fast and private but cannot use tools as well as Claude.'), openAddons());
   } else if (c.provider === 'anthropic') {
-    const dl = h('datalist', { id: 'claude-models' }, ['claude-sonnet-5', 'claude-haiku-4-5-20251001', 'claude-opus-5'].map((m) => h('option', { value: m })));
+    const dl = h('datalist', { id: 'claude-models' }, ['claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-opus-5-5'].map((m) => h('option', { value: m })));
     const model = T(c.anthropic, 'model'); model.setAttribute('list', 'claude-models');
     kids.push(row('Model', model, dl), keyField('anthropic', 'Anthropic key'), note('Haiku answers fastest, which feels best in voice conversation. Sonnet is smarter.'));
   } else {
     const p = c[c.provider];
-    const model = T(p, 'model');
-    if (c.provider === 'openai') {
-      const dl = h('datalist', { id: 'openai-models' }, ['gpt-6-astra', 'gpt-6.1-sol', 'gpt-6-luna', 'gpt-5.6-sol', 'gpt-5.1', 'gpt-5', 'gpt-5-mini'].map((m) => h('option', { value: m })));
-      model.setAttribute('list', 'openai-models');
-      kids.push(
-        row('Base URL', T(p, 'baseUrl')),
-        row('Model', model, dl),
-        row('Reasoning effort', SEL(c, 'reasoningEffort', [['low', 'Low — faster'], ['medium', 'Medium'], ['high', 'High'], ['xhigh', 'Extra high'], ['max', 'Maximum — deepest GPT-6 reasoning']])),
-        note('GPT-6 supports extra-high and maximum reasoning; GPT-5 uses its supported effort levels. Higher effort may increase latency and token cost.'),
-        keyField(c.provider, 'API key'));
-    } else {
-      kids.push(row('Base URL', T(p, 'baseUrl')), row('Model', model), keyField(c.provider, 'API key'));
-    }
+    kids.push(row('Base URL', T(p, 'baseUrl')), row('Model', T(p, 'model')), keyField(c.provider, 'API key'));
   }
   kids.push(
     row('Remembered turns', bind(c, 'maxTurns', h('input', { type: 'number', min: 2, max: 40, value: c.maxTurns }), Number)),
@@ -332,21 +320,33 @@ function updatesSection() {
     note('The same repository is used for the add-on list. Updates come from its releases.'));
 }
 
-let metricsTimer = 0;
+let metricsTimer = 0, peakTotalMB = 0;
 function performanceSection() {
   const out = h('div', { class: 'out' });
+  const warn = h('div', { class: 'warn' });
+  const STUCK_MS = 10 * 60000;  // an add-on still running this long with nothing pending is worth a look
   const paint = async () => {
     const m = await api.metrics();
     const total = m.processes.reduce((a, p) => a + p.memMB, 0);
+    if (total > peakTotalMB) peakTotalMB = total;
+    const addonLines = (m.addonDetail || []).map((d) => {
+      const mins = Math.round(d.sinceMs / 60000);
+      const stuck = d.sinceMs > STUCK_MS && !d.pending;
+      return `  ${d.id.padEnd(16)} up ${mins} min${d.pending ? ', working now' : ''}${stuck ? '  - running a long time with nothing to do, might be worth stopping' : ''}`;
+    });
     out.textContent = m.processes.map((p) => `${p.type.padEnd(10)} ${String(p.memMB).padStart(5)} MB   ${String(p.cpu).padStart(4)} % CPU`).join('\n')
-      + `\n${'total'.padEnd(10)} ${String(total).padStart(5)} MB\nwindows open: ${m.windows.join(' · ')}\nadd-ons running: ${m.addons.length ? m.addons.join(', ') : 'none'}`;
+      + `\n${'total'.padEnd(10)} ${String(total).padStart(5)} MB   (peak this session: ${peakTotalMB} MB)`
+      + `\nwindows open: ${m.windows.join(' · ')}`
+      + `\nadd-ons running: ${m.addons.length ? '\n' + addonLines.join('\n') : 'none'}`;
+    const stuckOnes = (m.addonDetail || []).filter((d) => d.sinceMs > STUCK_MS && !d.pending);
+    warn.textContent = stuckOnes.length ? `${stuckOnes.map((d) => d.id).join(', ')} ${stuckOnes.length > 1 ? 'have' : 'has'} been running a long time doing nothing - open Add-ons to stop it if you don't need it right now.` : '';
   };
   paint();
   metricsTimer = setInterval(() => { if (!document.hidden) paint(); }, 2000);
   return section('Performance',
     range('Frame rate while Saeed is idle', S.performance, 'idleFps', 5, 30, 1),
     note('Saeed draws at full speed while something happens and slows down while he only stands there. Add-ons and models start when needed and stop when idle; nothing runs while he is hidden.'),
-    h('div', { class: 'muted' }, 'What is running now'), out);
+    h('div', { class: 'muted' }, 'What is running now'), out, warn);
 }
 
 /* ---------- page ---------- */

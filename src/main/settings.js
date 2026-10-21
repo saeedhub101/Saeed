@@ -2,19 +2,18 @@
 // Defaults for everything configurable in the Settings window.
 const DEFAULT_SETTINGS = {
   stt: {
-    provider: 'addon:whisper-local',    // offline-first; cloud STT remains optional
+    provider: 'openai',                // openai | custom | elevenlabs | addon:<id> (for example the Whisper add-on)
     language: 'auto',                  // auto | ar | en
     openai: { baseUrl: 'https://api.openai.com/v1', model: 'whisper-1' },
     custom: { baseUrl: 'https://api.groq.com/openai/v1', model: 'whisper-large-v3' },
     elevenlabs: { model: 'scribe_v1' },
   },
   llm: {
-    provider: 'openai',                // anthropic | openai | custom
+    provider: 'anthropic',             // anthropic | openai | custom
     maxTurns: 12,
-    reasoningEffort: 'max',           // low | medium | high | xhigh | max; maximize GPT-6 reasoning
     systemPrompt: '',
-    anthropic: { model: 'claude-sonnet-5' },
-    openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-6-astra' },
+    anthropic: { model: 'claude-sonnet-5-5' },
+    openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
     custom: { baseUrl: 'http://localhost:11434/v1', model: 'llama3.1' },
   },
   tts: {
@@ -68,9 +67,9 @@ const DEFAULT_SETTINGS = {
     grants: {},                        // { addonId: { 'files.write': true } } set by "Always allow"
     dangerous: false,                  // allow deleting drive roots, the Windows folder and the user profile folder - its own switch, not part of the reset below
   },
-  updates: { repo: 'saeedhub101/Saeed', autoCheck: true },
+  updates: { repo: '', autoCheck: true },
   ui: { language: 'en' },
-  addons: { registryUrl: '', sources: [], enabled: { 'whisper-local': true }, settings: {}, trusted: {}, removed: [] },
+  addons: { registryUrl: '', sources: [], enabled: {}, settings: {}, trusted: {}, removed: [] },
   performance: { idleFps: 12 },
   web: { search: 'duckduckgo', maxResults: 6, fetchMaxChars: 12000 },   // duckduckgo (no key) | brave | tavily
   memory: { enabled: true },

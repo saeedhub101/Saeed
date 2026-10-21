@@ -41,7 +41,7 @@ function settingsForm(a) {
   if (!a.settingsDef.length) return null;
   const values = { ...a.settings };
   const save = debounce(() => api.addonsSaveSettings(a.id, values), 300);
-  const fields = a.settingsDef.map((f) => {
+  return h('div', { class: 'form' }, a.settingsDef.map((f) => {
     let el;
     if (f.type === 'select') el = h('select', { value: values[f.key] }, (f.options || []).map((o) => h('option', { value: Array.isArray(o) ? o[0] : o }, Array.isArray(o) ? o[1] : o)));
     else if (f.type === 'checkbox') el = h('input', { type: 'checkbox', checked: !!values[f.key] });
@@ -50,23 +50,7 @@ function settingsForm(a) {
       values[f.key] = el.type === 'checkbox' ? el.checked : f.type === 'number' ? Number(el.value) : el.value; save();
     });
     return h('div', { class: 'row' }, h('span', { class: 'lbl' }, f.label || f.key), el);
-  });
-  if (a.id !== 'llm-llamacpp') return h('div', { class: 'form' }, fields);
-  const bar = h('div', { class: 'bar', hidden: true }, h('div', {}));
-  const status = h('div', { class: 'meta' }, 'The local model is optional. Download one only when you choose to use it; it will not download during chat.');
-  bars['local-brain-model'] = { bar: bar.firstChild, text: status };
-  const download = h('button', { class: 'btn primary', onclick: async () => {
-    const choice = values.modelChoice || 'qwen3-0.6b';
-    await api.addonsSaveSettings(a.id, values);
-    download.disabled = true; bar.hidden = false; status.textContent = 'Starting model download…';
-    const r = await api.addonsDownloadModel(choice);
-    download.disabled = false;
-    if (r.ok) { status.textContent = r.alreadyPresent ? 'This model is already downloaded and selected.' : 'Model downloaded and selected. Saeed will use it locally when the local brain is selected.'; toast('Local model ready.'); }
-    else { bar.hidden = true; status.textContent = 'Model download failed: ' + r.error; toast(r.error); }
-  } }, 'Download selected model');
-  return h('div', { class: 'form' }, fields,
-    h('div', { class: 'meta' }, 'Model downloads are manual and optional. Qwen3 0.6B is the smaller option (~0.43 GB); Qwen3 4B is larger (~2.5 GB).'),
-    h('div', { class: 'btns' }, download), bar, status);
+  }));
 }
 
 function installedCard(a) {
@@ -94,30 +78,11 @@ function storeCard(e) {
     go.disabled = true; b.hidden = false; t.textContent = 'starting…';
     const r = await api.addonsInstall(e);
     b.hidden = true; t.textContent = '';
-    if (r.ok) { toast(`${e.name} installed.`); await loadStore(); render(); }
-    else { go.disabled = false; if (r.error !== 'Cancelled.') toast(r.error); }
+    if (r.ok) toast(`${e.name} installed.`); else { go.disabled = false; if (r.error !== 'Cancelled.') toast(r.error); }
   } }, label);
-  const modelControls = e.id === 'llm-llamacpp' && e.installed
-    ? (() => {
-      const pick = h('select', { class: 'grow' },
-        h('option', { value: 'qwen3-0.6b' }, 'Qwen3 0.6B — smaller (~430 MB)'),
-        h('option', { value: 'qwen3-4b' }, 'Qwen3 4B — stronger (~2.5 GB)'));
-      const download = h('button', { class: 'btn primary', onclick: async () => {
-        download.disabled = true; b.hidden = false; t.textContent = 'Downloading selected Qwen model…';
-        const r = await api.addonsDownloadModel(pick.value);
-        download.disabled = false;
-        if (r.ok) { t.textContent = 'Model downloaded and selected. Local Brain can now use it.'; toast('Qwen model ready.'); }
-        else { t.textContent = 'Model download failed: ' + r.error; toast(r.error); }
-        await loadStore(); render();
-      } }, 'Download Qwen model');
-      return h('div', { class: 'form' },
-        h('div', { class: 'meta' }, 'The add-on is the runtime; Qwen is a separate model file. Choose the model here and download it explicitly.'),
-        h('div', { class: 'row' }, h('span', { class: 'lbl' }, 'Qwen model'), pick),
-        h('div', { class: 'btns' }, download));
-    })() : null;
   return h('div', { class: 'card' },
     h('div', { class: 'top' }, h('div', { class: 'grow' }, h('h4', {}, e.name, ' ', h('span', { class: 'meta' }, `v${e.version}${e.author ? ' · ' + e.author : ''}${e.size ? ' · ' + fmtBytes(e.size) : ''}${e.source === 'included' ? ' · included with Saeed' : ''}`)), h('div', { class: 'meta' }, e.description)), go),
-    h('div', { class: 'chips' }, (e.permissions || []).map(chip)), modelControls, b, t);
+    h('div', { class: 'chips' }, (e.permissions || []).map(chip)), b, t);
 }
 
 // Makes an add-on from the user's own GLB: a hat, a bag, or clothes made for the same skeleton.
@@ -166,35 +131,13 @@ function sourcesCard() {
     h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: async () => { await api.addonsSetSources(list); toast('Sources saved.'); loadStore(); } }, 'Save sources')));
 }
 
-function qwenModelsCard() {
-  const status = h('div', { class: 'meta' }, 'Choose a Qwen model. The model is downloaded separately from the Local Brain add-on.');
-  const bar = h('div', { class: 'bar', hidden: true }, h('div', {}));
-  const controls = [
-    ['qwen3-0.6b', 'Qwen3 0.6B — smaller (~430 MB)'],
-    ['qwen3-4b', 'Qwen3 4B — stronger (~2.5 GB)']
-  ].map(([choice, label]) => h('button', { class: 'btn primary', onclick: async (event) => {
-    const button = event.currentTarget || event.target;
-    button.disabled = true; bar.hidden = false; status.textContent = 'Downloading ' + label + '…';
-    bars['qwen-model-' + choice] = { bar: bar.firstChild, text: status };
-    const r = await api.addonsDownloadModel(choice);
-    button.disabled = false;
-    if (r.ok) { status.textContent = label + ' downloaded and selected. Install/enable Local Brain to use it.'; toast(label + ' ready.'); }
-    else { status.textContent = 'Download failed: ' + r.error; toast(r.error); }
-  } }, 'Download ' + label));
-  return h('div', { class: 'card' },
-    h('h4', {}, 'Qwen local AI models'),
-    h('div', { class: 'meta' }, 'Qwen models are not separate ZIP add-ons. Select and download the model file here; install and enable “Local brain (Qwen / Llama)” to run it.'),
-    h('div', { class: 'btns' }, ...controls), bar, status);
-}
-
 function render() {
   const y = window.scrollY;
   if (tab === 'installed') {
-    root.replaceChildren(qwenModelsCard(), ...(creating ? [packCard()] : []), ...(installed.length ? installed.map(installedCard) : [h('div', { class: 'empty' }, 'No add-ons installed yet. Open the Store tab, or install one from a file.')]));
+    root.replaceChildren(...(creating ? [packCard()] : []), ...(installed.length ? installed.map(installedCard) : [h('div', { class: 'empty' }, 'No add-ons installed yet. Open the Store tab, or install one from a file.')]));
   } else {
     const shown = store ? store.filter((e) => cat === 'all' || e.category === cat) : [];
     root.replaceChildren(
-      qwenModelsCard(),
       linkOpen ? linkCard() : null,
       showSources ? sourcesCard() : null,
       h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: loadStore }, 'Refresh list'), h('button', { class: 'btn', onclick: () => { showSources = !showSources; render(); } }, 'Sources…')),

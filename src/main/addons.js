@@ -60,11 +60,8 @@ function start(a) {
     if (m.ok) r.resolve(m.result); else r.reject(new Error(m.error));
   });
   child.on('exit', () => {
-    clearTimeout(p.timer);
     for (const [, r] of p.pending) r.reject(new Error('The add-on was stopped.'));
-    p.pending.clear();
-    p.streams.clear();
-    if (procs.get(a.id) === p) procs.delete(a.id);
+    procs.delete(a.id);
     if (ctx.onChange) ctx.onChange();
   });
   if (child.stderr) child.stderr.on('data', (d) => console.error(`[${a.id}]`, String(d).trim()));
@@ -79,13 +76,8 @@ const stopAll = () => { for (const id of [...procs.keys()]) stop(id); };
 
 function armIdle(a, p) {
   clearTimeout(p.timer);
-  if (procs.get(a.id) !== p) return;
   const secs = a.idleSeconds || ctx.getSettings().agent.addonIdleSeconds || 90;
-  p.timer = setTimeout(() => {
-    if (procs.get(a.id) !== p) return;
-    if (p.pending.size) armIdle(a, p);
-    else stop(a.id);
-  }, secs * 1000);
+  p.timer = setTimeout(() => { if (p.pending.size) armIdle(a, p); else stop(a.id); }, secs * 1000);
 }
 
 async function call(a, target, name, args, signal, onStream) {
@@ -97,13 +89,10 @@ async function call(a, target, name, args, signal, onStream) {
   try {
     await p.ready;
     const env = { denyPaths: perms.denyList(), settings: settingsOf(a) };
-    let timeout;
-    try {
-      return await Promise.race([
-        send(p, { type: 'call', target, name, args, env }, onStream),
-        new Promise((_, rej) => { timeout = setTimeout(() => { stop(a.id); rej(new Error('The add-on took too long (5 minutes); its process was stopped.')); }, 300000); }),
-      ]);
-    } finally { clearTimeout(timeout); }
+    return await Promise.race([
+      send(p, { type: 'call', target, name, args, env }, onStream),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('The add-on took too long (5 minutes).')), 300000)),
+    ]);
   } finally {
     if (signal) signal.removeEventListener('abort', onAbort);
     if (procs.get(a.id) === p) armIdle(a, p);
@@ -229,9 +218,8 @@ function installZip(zipPath) {
 }
 
 async function download(entry, onProgress) {
-  const res = await fetch(entry.url, { cache: 'no-store' });
+  const res = await fetch(entry.url);
   if (!res.ok) throw new Error('Download failed: ' + res.status);
-  if (!res.body) throw new Error('Download failed: the server returned an empty response.');
   const total = Number(res.headers.get('content-length')) || entry.size || 0;
   const tmp = path.join(app.getPath('temp'), `saeed-${entry.id}-${Date.now()}.zip`);
   const out = fs.createWriteStream(tmp);
@@ -239,37 +227,16 @@ async function download(entry, onProgress) {
   let got = 0;
   const t0 = Date.now();
   const reader = res.body.getReader();
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      hash.update(value);
-      got += value.length;
-      if (!out.write(Buffer.from(value))) await new Promise((resolve, reject) => {
-        out.once('drain', resolve);
-        out.once('error', reject);
-      });
-      const elapsed = (Date.now() - t0) / 1000 || 1;
-      const bps = got / elapsed;
-      if (onProgress) onProgress({ id: entry.id, transferred: got, total, bps, eta: total && bps ? Math.max(0, total - got) / bps : 0 });
-    }
-    await new Promise((resolve, reject) => {
-      out.once('error', reject);
-      out.end(resolve);
-    });
-    const actualHash = hash.digest('hex').toLowerCase();
-    const expectedHash = String(entry.sha256 || '').trim().toLowerCase();
-    if (expectedHash && actualHash !== expectedHash) {
-      throw new Error(`Add-on checksum mismatch. Expected ${expectedHash}; received ${actualHash}. The file was not installed. Refresh the add-on list and retry.`);
-    }
-    return installZip(tmp);
-  } catch (error) {
-    try { await reader.cancel(); } catch { /* stream already closed */ }
-    try { out.destroy(); } catch { /* stream already closed */ }
-    throw error;
-  } finally {
-    fs.rmSync(tmp, { force: true });
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    out.write(value); hash.update(value); got += value.length;
+    const s = (Date.now() - t0) / 1000 || 1;
+    onProgress({ id: entry.id, transferred: got, total, bps: got / s, eta: total ? (total - got) / (got / s) : 0 });
   }
+  await new Promise((r) => out.end(r));
+  if (entry.sha256 && hash.digest('hex') !== String(entry.sha256).toLowerCase()) { fs.rmSync(tmp, { force: true }); throw new Error('The downloaded file does not match its checksum. Not installed.'); }
+  try { return installZip(tmp); } finally { fs.rmSync(tmp, { force: true }); }
 }
 
 function remove(id) {
@@ -391,5 +358,8 @@ function summary() {
   }));
 }
 const running = () => [...procs.keys()];
+// For Settings -> Performance: how long each running add-on has been up and whether it's mid-call right now,
+// so a process stuck running far longer than its idle timeout stands out as worth a look.
+const runningDetail = () => [...procs.entries()].map(([id, p]) => ({ id, sinceMs: Date.now() - p.since, pending: p.pending.size }));
 
-module.exports = { languages, stringsFor, installBundled, installUrl, createPack, init, scan, summary, toolDefs, invokeTool, providersOf, callProvider, accessories, readAddonFile, installZip, download, remove, registry, stop, stopAll, running };
+module.exports = { languages, stringsFor, installBundled, installUrl, createPack, init, scan, summary, toolDefs, invokeTool, providersOf, callProvider, accessories, readAddonFile, installZip, download, remove, registry, stop, stopAll, running, runningDetail };
