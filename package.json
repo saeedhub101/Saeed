@@ -60,8 +60,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "OWNER",
-        "repo": "saeed"
+        "owner": "saeedhub101",
+        "repo": "Saeed"
       }
     ],
     "extraResources": [
